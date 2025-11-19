@@ -12,13 +12,24 @@ description = "WASM bindings for Ruvector for browser deployment"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-ruvector-core = { path = "../ruvector-core" }
+ruvector-core = { path = "../ruvector-core", default-features = false }
+parking_lot = { workspace = true }
+getrandom = { workspace = true }
 
 # WASM
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 js-sys = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "console",
+    "Window",
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbObjectStore",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbOpenDbRequest",
+] }
 
 # Error handling
 thiserror = { workspace = true }
@@ -36,6 +47,15 @@ tracing-wasm = "0.2"
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 
+[features]
+default = []
+simd = ["ruvector-core/simd"]
+
 [profile.release]
 opt-level = "z"
 lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.release.package."*"]
+opt-level = "z"

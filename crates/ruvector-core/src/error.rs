@@ -25,6 +25,10 @@ pub enum RuvectorError {
     #[error("Invalid parameter: {0}")]
     InvalidParameter(String),
 
+    /// Invalid input
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     /// Storage error
     #[error("Storage error: {0}")]
     StorageError(String),

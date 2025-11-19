@@ -1,28 +1,224 @@
-//! Ruvector CLI
+//! Ruvector CLI - High-performance vector database command-line interface
 
-use clap::Parser;
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use colored::*;
+use std::path::PathBuf;
+
+mod cli;
+mod config;
+
+use crate::cli::commands::*;
+use crate::config::Config;
 
 #[derive(Parser)]
 #[command(name = "ruvector")]
 #[command(about = "High-performance Rust vector database CLI", long_about = None)]
+#[command(version)]
 struct Cli {
-    /// Command to execute
+    /// Configuration file path
+    #[arg(short, long, global = true)]
+    config: Option<PathBuf>,
+
+    /// Enable debug mode
+    #[arg(short, long, global = true)]
+    debug: bool,
+
+    /// Disable colors
+    #[arg(long, global = true)]
+    no_color: bool,
+
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
 
-#[derive(clap::Subcommand)]
+#[derive(Subcommand)]
 enum Commands {
-    /// Show version information
-    Version,
+    /// Create a new vector database
+    Create {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        path: String,
+
+        /// Vector dimensions
+        #[arg(short, long)]
+        dimensions: usize,
+    },
+
+    /// Insert vectors from a file
+    Insert {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+
+        /// Input file path
+        #[arg(short, long)]
+        input: String,
+
+        /// Input format (json, csv, npy)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+
+        /// Hide progress bar
+        #[arg(long)]
+        no_progress: bool,
+    },
+
+    /// Search for similar vectors
+    Search {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+
+        /// Query vector (comma-separated floats or JSON array)
+        #[arg(short, long)]
+        query: String,
+
+        /// Number of results
+        #[arg(short = 'k', long, default_value = "10")]
+        top_k: usize,
+
+        /// Show full vectors in results
+        #[arg(long)]
+        show_vectors: bool,
+    },
+
+    /// Show database information
+    Info {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+    },
+
+    /// Run a quick performance benchmark
+    Benchmark {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+
+        /// Number of queries to run
+        #[arg(short = 'n', long, default_value = "1000")]
+        queries: usize,
+    },
+
+    /// Export database to file
+    Export {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: String,
+
+        /// Output format (json, csv)
+        #[arg(short, long, default_value = "json")]
+        format: String,
+    },
+
+    /// Import from other vector databases
+    Import {
+        /// Database file path
+        #[arg(short, long, default_value = "./ruvector.db")]
+        db: String,
+
+        /// Source database type (faiss, pinecone, weaviate)
+        #[arg(short, long)]
+        source: String,
+
+        /// Source file or connection path
+        #[arg(short = 'p', long)]
+        source_path: String,
+    },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    match cli.command {
-        Some(Commands::Version) | None => {
-            println!("Ruvector v{}", env!("CARGO_PKG_VERSION"));
+    // Initialize logging
+    if cli.debug {
+        tracing_subscriber::fmt()
+            .with_env_filter("ruvector=debug")
+            .init();
+    }
+
+    // Disable colors if requested
+    if cli.no_color {
+        colored::control::set_override(false);
+    }
+
+    // Load configuration
+    let config = Config::load(cli.config)?;
+
+    // Execute command
+    let result = match cli.command {
+        Commands::Create { path, dimensions } => {
+            create_database(&path, dimensions, &config)
         }
+        Commands::Insert { db, input, format, no_progress } => {
+            insert_vectors(&db, &input, &format, &config, !no_progress)
+        }
+        Commands::Search { db, query, top_k, show_vectors } => {
+            let query_vec = parse_query_vector(&query)?;
+            search_vectors(&db, query_vec, top_k, &config, show_vectors)
+        }
+        Commands::Info { db } => {
+            show_info(&db, &config)
+        }
+        Commands::Benchmark { db, queries } => {
+            run_benchmark(&db, &config, queries)
+        }
+        Commands::Export { db, output, format } => {
+            export_database(&db, &output, &format, &config)
+        }
+        Commands::Import { db, source, source_path } => {
+            import_from_external(&db, &source, &source_path, &config)
+        }
+    };
+
+    // Handle errors
+    if let Err(e) = result {
+        eprintln!("{}", cli::format::format_error(&e.to_string()));
+        if cli.debug {
+            eprintln!("\n{:#?}", e);
+        } else {
+            eprintln!("\n{}", "Run with --debug for more details".dimmed());
+        }
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
+/// Parse query vector from string
+fn parse_query_vector(s: &str) -> Result<Vec<f32>> {
+    // Try JSON first
+    if s.trim().starts_with('[') {
+        return serde_json::from_str(s)
+            .map_err(|e| anyhow::anyhow!("Failed to parse query vector as JSON: {}", e));
+    }
+
+    // Try comma-separated
+    s.split(',')
+        .map(|s| s.trim().parse::<f32>())
+        .collect::<std::result::Result<Vec<f32>, _>>()
+        .map_err(|e| anyhow::anyhow!("Failed to parse query vector: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_query_vector_json() {
+        let vec = parse_query_vector("[1.0, 2.0, 3.0]").unwrap();
+        assert_eq!(vec, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_parse_query_vector_csv() {
+        let vec = parse_query_vector("1.0, 2.0, 3.0").unwrap();
+        assert_eq!(vec, vec![1.0, 2.0, 3.0]);
     }
 }

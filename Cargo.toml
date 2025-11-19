@@ -11,7 +11,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.77"
 license = "MIT"
 authors = ["Ruvector Team"]
 repository = "https://github.com/ruvnet/ruvector"
@@ -40,6 +40,7 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["Worker", "MessagePort", "console"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 # Async runtime
 tokio = { version = "1.41", features = ["rt-multi-thread", "sync", "macros"] }
@@ -55,6 +56,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ndarray = "0.16"
 rand = "0.8"
 rand_distr = "0.4"
+
+# Time and UUID
+chrono = "0.4"
+uuid = { version = "1.11", features = ["v4", "serde", "js"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive", "cargo"] }

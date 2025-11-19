@@ -29,7 +29,7 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 
 # Math and numerics
-ndarray = { workspace = true }
+ndarray = { workspace = true, features = ["serde"] }
 rand = { workspace = true }
 rand_distr = { workspace = true }
 
@@ -38,8 +38,9 @@ dashmap = { workspace = true }
 parking_lot = { workspace = true }
 once_cell = { workspace = true }
 
-# UUID generation
-uuid = { version = "1.11", features = ["v4", "serde"] }
+# Time and UUID
+chrono = { workspace = true }
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -55,6 +56,23 @@ harness = false
 [[bench]]
 name = "hnsw_search"
 harness = false
+
+[[bench]]
+name = "quantization_bench"
+harness = false
+
+[[bench]]
+name = "batch_operations"
+harness = false
+
+[[bench]]
+name = "comprehensive_bench"
+harness = false
+
+[features]
+default = ["simd", "uuid-support"]
+uuid-support = ["uuid"]
+simd = []
 
 [lib]
 crate-type = ["rlib"]
