@@ -113,7 +113,7 @@ async function analyzeVoterSentiment() {
     // 3. Use of words like "but", "however", "also"
 
     const sentimentNeutrality = 1 - Math.abs(voter.sentiment!.score);
-    const preferenceDiv versity = Math.min(voter.preferences!.length / 3, 1);
+    const preferenceDiversity = Math.min(voter.preferences!.length / 3, 1);
     const moderateLanguage = voter.statement.match(/but|however|also|while|although/gi)?.length || 0;
 
     const swingScore = (

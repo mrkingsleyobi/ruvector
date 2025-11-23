@@ -10,6 +10,54 @@
 
 import { PsychoSymbolicReasoner } from 'psycho-symbolic-reasoner';
 
+/**
+ * LRU Cache for embeddings with memory limit
+ * Prevents unbounded cache growth and memory leaks
+ * Max size: 1000 entries (~6MB assuming 6KB per embedding)
+ */
+class LRUCache<K, V> {
+  private cache: Map<K, V>;
+  private maxSize: number;
+
+  constructor(maxSize: number = 1000) {
+    this.cache = new Map();
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    if (!this.cache.has(key)) return undefined;
+
+    // Move to end (most recently used)
+    const value = this.cache.get(key)!;
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    // Remove if exists to reinsert at end
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+
+    // Evict oldest if at capacity
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+
+    this.cache.set(key, value);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+}
+
 export interface RuvectorConfig {
   dbPath: string;
   collectionName?: string;
@@ -42,13 +90,14 @@ export class RuvectorAdapter {
   private reasoner: PsychoSymbolicReasoner;
   private vectorDB: any; // Ruvector instance (optional peer dependency)
   private config: RuvectorConfig;
-  private embeddingCache: Map<string, number[]>;
+  private embeddingCache: LRUCache<string, number[]>;
   private available: boolean = false;
 
   constructor(reasoner: PsychoSymbolicReasoner, config: RuvectorConfig) {
     this.reasoner = reasoner;
     this.config = config;
-    this.embeddingCache = new Map();
+    // LRU cache with 1000 entry limit (~6MB max, prevents memory leaks)
+    this.embeddingCache = new LRUCache(1000);
     this.detectAvailability();
   }
 

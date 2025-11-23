@@ -31,6 +31,37 @@ var import_psycho_symbolic_reasoner = require("psycho-symbolic-reasoner");
 var import_agentic_synth = require("@ruvector/agentic-synth");
 
 // src/adapters/ruvector-adapter.ts
+var LRUCache = class {
+  cache;
+  maxSize;
+  constructor(maxSize = 1e3) {
+    this.cache = /* @__PURE__ */ new Map();
+    this.maxSize = maxSize;
+  }
+  get(key) {
+    if (!this.cache.has(key)) return void 0;
+    const value = this.cache.get(key);
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+  set(key, value) {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+  clear() {
+    this.cache.clear();
+  }
+  size() {
+    return this.cache.size;
+  }
+};
 var RuvectorAdapter = class {
   reasoner;
   vectorDB;
@@ -41,7 +72,7 @@ var RuvectorAdapter = class {
   constructor(reasoner, config) {
     this.reasoner = reasoner;
     this.config = config;
-    this.embeddingCache = /* @__PURE__ */ new Map();
+    this.embeddingCache = new LRUCache(1e3);
     this.detectAvailability();
   }
   /**
