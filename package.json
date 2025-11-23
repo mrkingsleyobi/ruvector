@@ -35,5 +35,8 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "psycho-symbolic-reasoner": "^1.0.7"
   }
 }
