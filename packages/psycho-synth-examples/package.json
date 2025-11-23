@@ -50,5 +50,25 @@
     "examples"
   ],
   "author": "rUv",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruvnet/ruvector.git",
+    "directory": "packages/psycho-synth-examples"
+  },
+  "bugs": {
+    "url": "https://github.com/ruvnet/ruvector/issues"
+  },
+  "homepage": "https://github.com/ruvnet/ruvector/tree/main/packages/psycho-synth-examples#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "examples",
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
 }
