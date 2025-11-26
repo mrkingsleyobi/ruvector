@@ -67,8 +67,12 @@ pub struct RelationshipPattern {
     pub properties: Option<PropertyMap>,
     pub direction: Direction,
     pub range: Option<RelationshipRange>,
+    /// Source node pattern
     pub from: Box<NodePattern>,
-    pub to: Box<NodePattern>,
+    /// Target - can be a NodePattern or another Pattern for chained relationships
+    /// For simple relationships like (a)-[r]->(b), this is just the node
+    /// For chained patterns like (a)-[r]->(b)<-[s]-(c), the target is nested
+    pub to: Box<Pattern>,
 }
 
 /// Hyperedge pattern for N-ary relationships

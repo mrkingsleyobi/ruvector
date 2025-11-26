@@ -93,6 +93,11 @@ impl Parser {
             self.match_token(&[TokenKind::Semicolon]);
         }
 
+        // Reject empty queries
+        if statements.is_empty() {
+            return Err(ParseError::InvalidSyntax("Empty query - expected at least one statement".to_string()));
+        }
+
         Ok(Query { statements })
     }
 
@@ -260,7 +265,7 @@ impl Parser {
 
             // If multiple targets, create hyperedge
             if target_nodes.len() > 1 {
-                Ok(Pattern::Hyperedge(HyperedgePattern {
+                return Ok(Pattern::Hyperedge(HyperedgePattern {
                     variable,
                     rel_type: rel_type.ok_or_else(|| {
                         ParseError::InvalidSyntax("Hyperedge requires relationship type".to_string())
@@ -269,6 +274,26 @@ impl Parser {
                     from: Box::new(from),
                     arity: target_nodes.len() + 1, // +1 for source node
                     to: target_nodes,
+                }));
+            }
+
+            // Get the single target node pattern
+            let target_node = target_nodes.into_iter().next().unwrap();
+
+            // Check if there's a chained pattern (another relationship starting from target)
+            if self.check(&TokenKind::Dash) || self.check(&TokenKind::LeftArrow) {
+                // There's a chained pattern - recursively parse from the target node
+                let chained = self.parse_chained_pattern(target_node)?;
+
+                // Create the first relationship pattern with the chained pattern as target
+                Ok(Pattern::Relationship(RelationshipPattern {
+                    variable,
+                    rel_type,
+                    properties,
+                    direction,
+                    range,
+                    from: Box::new(from),
+                    to: Box::new(chained),
                 }))
             } else {
                 Ok(Pattern::Relationship(RelationshipPattern {
@@ -278,7 +303,105 @@ impl Parser {
                     direction,
                     range,
                     from: Box::new(from),
-                    to: Box::new(target_nodes.into_iter().next().unwrap()),
+                    to: Box::new(Pattern::Node(target_node)),
+                }))
+            }
+        } else {
+            Ok(Pattern::Node(from))
+        }
+    }
+
+    /// Parse a chained pattern where we already have the starting node pattern
+    fn parse_chained_pattern(&mut self, from: NodePattern) -> ParseResult<Pattern> {
+        // Check for relationship - can start with `-` or `<-`
+        if self.check(&TokenKind::Dash) || self.check(&TokenKind::LeftArrow) {
+            let starts_with_incoming = self.match_token(&[TokenKind::LeftArrow]);
+            if !starts_with_incoming {
+                self.consume(TokenKind::Dash, "-")?;
+            }
+
+            // Parse relationship details [r:TYPE {props} *min..max]
+            let (variable, rel_type, properties, range) = if self.match_token(&[TokenKind::LeftBracket]) {
+                let variable = if let TokenKind::Identifier(v) = &self.peek().kind {
+                    let v = v.clone();
+                    self.advance();
+                    Some(v)
+                } else {
+                    None
+                };
+
+                let rel_type = if self.match_token(&[TokenKind::Colon]) {
+                    if let TokenKind::Identifier(t) = &self.peek().kind {
+                        let t = t.clone();
+                        self.advance();
+                        Some(t)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let properties = if self.check(&TokenKind::LeftBrace) {
+                    Some(self.parse_property_map()?)
+                } else {
+                    None
+                };
+
+                let range = if self.match_token(&[TokenKind::Star]) {
+                    Some(self.parse_relationship_range()?)
+                } else {
+                    None
+                };
+
+                self.consume(TokenKind::RightBracket, "]")?;
+                (variable, rel_type, properties, range)
+            } else {
+                (None, None, None, None)
+            };
+
+            // Determine final direction
+            let direction = if self.match_token(&[TokenKind::Arrow]) {
+                Direction::Outgoing
+            } else if self.match_token(&[TokenKind::Dash]) {
+                if starts_with_incoming {
+                    Direction::Incoming
+                } else {
+                    Direction::Undirected
+                }
+            } else {
+                return Err(ParseError::InvalidSyntax(
+                    "Expected '->' or '-' after relationship".to_string()
+                ));
+            };
+
+            // Parse target node
+            self.consume(TokenKind::LeftParen, "(")?;
+            let target_node = self.parse_node_pattern_content()?;
+            self.consume(TokenKind::RightParen, ")")?;
+
+            // Check for another chained pattern
+            if self.check(&TokenKind::Dash) || self.check(&TokenKind::LeftArrow) {
+                let chained = self.parse_chained_pattern(target_node)?;
+
+                Ok(Pattern::Relationship(RelationshipPattern {
+                    variable,
+                    rel_type,
+                    properties,
+                    direction,
+                    range,
+                    from: Box::new(from),
+                    to: Box::new(chained),
+                }))
+            } else {
+                Ok(Pattern::Relationship(RelationshipPattern {
+                    variable,
+                    rel_type,
+                    properties,
+                    direction,
+                    range,
+                    from: Box::new(from),
+                    to: Box::new(Pattern::Node(target_node)),
                 }))
             }
         } else {
@@ -880,6 +1003,49 @@ impl Parser {
 
                 self.consume(TokenKind::RightBracket, "]")?;
                 Ok(Expression::List(items))
+            }
+            TokenKind::LeftBrace => {
+                // Map literal: {key1: value1, key2: value2}
+                self.advance();
+                let mut map = std::collections::HashMap::new();
+
+                if !self.check(&TokenKind::RightBrace) {
+                    loop {
+                        // Parse key (identifier or string)
+                        let key = match &self.peek().kind {
+                            TokenKind::Identifier(k) => {
+                                let k = k.clone();
+                                self.advance();
+                                k
+                            }
+                            TokenKind::String(k) => {
+                                let k = k.clone();
+                                self.advance();
+                                k
+                            }
+                            _ => {
+                                let token = self.peek();
+                                return Err(ParseError::UnexpectedToken {
+                                    expected: "map key (identifier or string)".to_string(),
+                                    found: token.kind.to_string(),
+                                    line: token.position.line,
+                                    column: token.position.column,
+                                });
+                            }
+                        };
+
+                        self.consume(TokenKind::Colon, ":")?;
+                        let value = self.parse_expression()?;
+                        map.insert(key, value);
+
+                        if !self.match_token(&[TokenKind::Comma]) {
+                            break;
+                        }
+                    }
+                }
+
+                self.consume(TokenKind::RightBrace, "}")?;
+                Ok(Expression::Map(map))
             }
             _ => {
                 let token = self.peek();

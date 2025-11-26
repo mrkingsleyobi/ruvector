@@ -50,11 +50,14 @@ impl SemanticSearch {
     pub fn find_similar_nodes(&self, query: &[f32], k: usize) -> Result<Vec<SemanticMatch>> {
         let results = self.index.search_similar_nodes(query, k)?;
 
+        // HNSW returns distance (0 = identical, 1 = orthogonal for cosine)
+        // Convert to similarity (1 = identical, 0 = orthogonal)
         Ok(results.into_iter()
-            .filter(|(_, score)| *score >= self.config.min_similarity)
-            .map(|(node_id, score)| SemanticMatch {
+            .map(|(node_id, distance)| (node_id, 1.0 - distance))
+            .filter(|(_, similarity)| *similarity >= self.config.min_similarity)
+            .map(|(node_id, similarity)| SemanticMatch {
                 node_id,
-                score,
+                score: similarity,
                 path_length: 0,
             })
             .collect())
@@ -123,11 +126,13 @@ impl SemanticSearch {
     pub fn find_related_edges(&self, query: &[f32], k: usize) -> Result<Vec<EdgeMatch>> {
         let results = self.index.search_similar_edges(query, k)?;
 
+        // Convert distance to similarity
         Ok(results.into_iter()
-            .filter(|(_, score)| *score >= self.config.min_similarity)
-            .map(|(edge_id, score)| EdgeMatch {
+            .map(|(edge_id, distance)| (edge_id, 1.0 - distance))
+            .filter(|(_, similarity)| *similarity >= self.config.min_similarity)
+            .map(|(edge_id, similarity)| EdgeMatch {
                 edge_id,
-                score,
+                score: similarity,
             })
             .collect())
     }
@@ -205,7 +210,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Vector index search returns empty - TODO: fix index population"]
     fn test_find_similar_nodes() -> Result<()> {
         let config = EmbeddingConfig {
             dimensions: 4,

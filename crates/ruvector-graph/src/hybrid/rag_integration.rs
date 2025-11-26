@@ -265,13 +265,21 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Context retrieval requires initialized index - TODO: fix index setup"]
     fn test_context_retrieval() -> Result<()> {
+        use crate::hybrid::vector_index::VectorIndexType;
+
         let config = EmbeddingConfig {
             dimensions: 4,
             ..Default::default()
         };
         let index = HybridIndex::new(config)?;
+        // Initialize the node index
+        index.initialize_index(VectorIndexType::Node)?;
+
+        // Add test embeddings so search returns results
+        index.add_node_embedding("doc1".to_string(), vec![1.0, 0.0, 0.0, 0.0])?;
+        index.add_node_embedding("doc2".to_string(), vec![0.9, 0.1, 0.0, 0.0])?;
+
         let semantic_search = SemanticSearch::new(index, SemanticSearchConfig::default());
         let rag = RagEngine::new(semantic_search, RagConfig::default());
 
@@ -279,6 +287,8 @@ mod tests {
         let context = rag.retrieve_context(&query)?;
 
         assert_eq!(context.query_embedding, query);
+        // Should find at least one document
+        assert!(!context.documents.is_empty());
         Ok(())
     }
 

@@ -239,7 +239,8 @@ impl SemanticAnalyzer {
 
     fn analyze_relationship_pattern(&mut self, rel: &RelationshipPattern) -> SemanticResult<()> {
         self.analyze_node_pattern(&rel.from)?;
-        self.analyze_node_pattern(&rel.to)?;
+        // rel.to is now a Pattern (can be NodePattern or chained RelationshipPattern)
+        self.analyze_pattern(&*rel.to)?;
 
         if let Some(variable) = &rel.variable {
             self.define_variable(variable.clone(), ValueType::Relationship)?;

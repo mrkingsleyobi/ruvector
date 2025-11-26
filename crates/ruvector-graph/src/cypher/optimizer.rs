@@ -339,7 +339,8 @@ impl QueryOptimizer {
 
                 // Add selectivity from connected nodes
                 selectivity += self.estimate_pattern_selectivity(&Pattern::Node(*rel.from.clone())) * 0.3;
-                selectivity += self.estimate_pattern_selectivity(&Pattern::Node(*rel.to.clone())) * 0.3;
+                // rel.to is now a Pattern (can be NodePattern or chained RelationshipPattern)
+                selectivity += self.estimate_pattern_selectivity(&*rel.to) * 0.3;
 
                 selectivity.min(1.0)
             }
