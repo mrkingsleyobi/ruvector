@@ -137,6 +137,10 @@ cypher-lalrpop = ["lalrpop-util"]
 name = "test_cypher_parser"
 path = "examples/test_cypher_parser.rs"
 
+[[bench]]
+name = "new_capabilities_bench"
+harness = false
+
 [lib]
 crate-type = ["rlib"]
 bench = false

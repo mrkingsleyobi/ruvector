@@ -50,17 +50,25 @@ impl SemanticSearch {
     pub fn find_similar_nodes(&self, query: &[f32], k: usize) -> Result<Vec<SemanticMatch>> {
         let results = self.index.search_similar_nodes(query, k)?;
 
+        // Pre-compute max distance threshold for faster comparison
+        // If min_similarity = 0.7, then max_distance = 0.3
+        let max_distance = 1.0 - self.config.min_similarity;
+
         // HNSW returns distance (0 = identical, 1 = orthogonal for cosine)
         // Convert to similarity (1 = identical, 0 = orthogonal)
-        Ok(results.into_iter()
-            .map(|(node_id, distance)| (node_id, 1.0 - distance))
-            .filter(|(_, similarity)| *similarity >= self.config.min_similarity)
-            .map(|(node_id, similarity)| SemanticMatch {
-                node_id,
-                score: similarity,
-                path_length: 0,
-            })
-            .collect())
+        // Use filter_map for single-pass optimization and pre-allocate result
+        let mut matches = Vec::with_capacity(results.len());
+        for (node_id, distance) in results {
+            // Filter by distance threshold (faster than converting and comparing)
+            if distance <= max_distance {
+                matches.push(SemanticMatch {
+                    node_id,
+                    score: 1.0 - distance,
+                    path_length: 0,
+                });
+            }
+        }
+        Ok(matches)
     }
 
     /// Find semantic paths through the graph
@@ -126,15 +134,20 @@ impl SemanticSearch {
     pub fn find_related_edges(&self, query: &[f32], k: usize) -> Result<Vec<EdgeMatch>> {
         let results = self.index.search_similar_edges(query, k)?;
 
-        // Convert distance to similarity
-        Ok(results.into_iter()
-            .map(|(edge_id, distance)| (edge_id, 1.0 - distance))
-            .filter(|(_, similarity)| *similarity >= self.config.min_similarity)
-            .map(|(edge_id, similarity)| EdgeMatch {
-                edge_id,
-                score: similarity,
-            })
-            .collect())
+        // Pre-compute max distance threshold for faster comparison
+        let max_distance = 1.0 - self.config.min_similarity;
+
+        // Convert distance to similarity with single-pass optimization
+        let mut matches = Vec::with_capacity(results.len());
+        for (edge_id, distance) in results {
+            if distance <= max_distance {
+                matches.push(EdgeMatch {
+                    edge_id,
+                    score: 1.0 - distance,
+                });
+            }
+        }
+        Ok(matches)
     }
 
     /// Compute combined score for a path

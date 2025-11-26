@@ -1007,7 +1007,8 @@ impl Parser {
             TokenKind::LeftBrace => {
                 // Map literal: {key1: value1, key2: value2}
                 self.advance();
-                let mut map = std::collections::HashMap::new();
+                // Pre-allocate with reasonable capacity to reduce reallocations
+                let mut map = std::collections::HashMap::with_capacity(8);
 
                 if !self.check(&TokenKind::RightBrace) {
                     loop {
