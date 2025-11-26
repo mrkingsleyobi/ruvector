@@ -34,7 +34,7 @@ impl QueryResultStream {
     /// }
     /// ```
     #[napi]
-    pub async fn next(&mut self) -> Result<Option<JsQueryResult>> {
+    pub fn next(&mut self) -> Result<Option<JsQueryResult>> {
         // This would poll the stream in a real implementation
         Ok(None)
     }
@@ -66,7 +66,7 @@ impl HyperedgeStream {
     /// }
     /// ```
     #[napi]
-    pub async fn next(&mut self) -> Result<Option<JsHyperedgeResult>> {
+    pub fn next(&mut self) -> Result<Option<JsHyperedgeResult>> {
         if self.index < self.results.len() {
             let result = self.results[self.index].clone();
             self.index += 1;
@@ -103,7 +103,7 @@ impl NodeStream {
 impl NodeStream {
     /// Get the next node
     #[napi]
-    pub async fn next(&mut self) -> Result<Option<JsNode>> {
+    pub fn next(&mut self) -> Result<Option<JsNode>> {
         if self.index < self.nodes.len() {
             let node = self.nodes[self.index].clone();
             self.index += 1;

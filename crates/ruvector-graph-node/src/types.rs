@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Distance metric for similarity calculation
 #[napi(string_enum)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum JsDistanceMetric {
     Euclidean,
     Cosine,
@@ -50,7 +50,7 @@ impl Default for JsGraphOptions {
 
 /// Node in the graph
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsNode {
     /// Node ID
     pub id: String,
@@ -62,7 +62,7 @@ pub struct JsNode {
 
 /// Edge between two nodes
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsEdge {
     /// Source node ID
     pub from: String,
@@ -73,14 +73,14 @@ pub struct JsEdge {
     /// Edge embedding
     pub embedding: Float32Array,
     /// Confidence score (0.0-1.0)
-    pub confidence: Option<f32>,
+    pub confidence: Option<f64>,
     /// Optional metadata
     pub metadata: Option<HashMap<String, String>>,
 }
 
 /// Hyperedge connecting multiple nodes
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsHyperedge {
     /// Node IDs connected by this hyperedge
     pub nodes: Vec<String>,
@@ -89,14 +89,14 @@ pub struct JsHyperedge {
     /// Embedding of the hyperedge description
     pub embedding: Float32Array,
     /// Confidence weight (0.0-1.0)
-    pub confidence: Option<f32>,
+    pub confidence: Option<f64>,
     /// Optional metadata
     pub metadata: Option<HashMap<String, String>>,
 }
 
 /// Query for searching hyperedges
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsHyperedgeQuery {
     /// Query embedding
     pub embedding: Float32Array,
@@ -116,7 +116,7 @@ pub struct JsHyperedgeResult {
 
 /// Query result
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsQueryResult {
     /// Nodes returned by the query
     pub nodes: Vec<JsNode>,
@@ -135,12 +135,12 @@ pub struct JsGraphStats {
     /// Total number of edges
     pub total_edges: u32,
     /// Average node degree
-    pub avg_degree: f32,
+    pub avg_degree: f64,
 }
 
 /// Batch insert data
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsBatchInsert {
     /// Nodes to insert
     pub nodes: Vec<JsNode>,
@@ -160,7 +160,7 @@ pub struct JsBatchResult {
 
 /// Temporal granularity
 #[napi(string_enum)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum JsTemporalGranularity {
     Hourly,
     Daily,
@@ -170,7 +170,7 @@ pub enum JsTemporalGranularity {
 
 /// Temporal hyperedge
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JsTemporalHyperedge {
     /// Base hyperedge
     pub hyperedge: JsHyperedge,

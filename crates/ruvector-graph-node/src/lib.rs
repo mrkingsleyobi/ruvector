@@ -100,7 +100,7 @@ impl GraphDatabase {
         let nodes = vec![edge.from.clone(), edge.to.clone()];
         let description = edge.description.clone();
         let embedding = edge.embedding.to_vec();
-        let confidence = edge.confidence.unwrap_or(1.0);
+        let confidence = edge.confidence.unwrap_or(1.0) as f32;
 
         tokio::task::spawn_blocking(move || {
             let core_edge = CoreHyperedge::new(nodes, description, embedding, confidence);
@@ -132,7 +132,7 @@ impl GraphDatabase {
         let nodes = hyperedge.nodes.clone();
         let description = hyperedge.description.clone();
         let embedding = hyperedge.embedding.to_vec();
-        let confidence = hyperedge.confidence.unwrap_or(1.0);
+        let confidence = hyperedge.confidence.unwrap_or(1.0) as f32;
 
         tokio::task::spawn_blocking(move || {
             let core_edge = CoreHyperedge::new(nodes, description, embedding, confidence);
@@ -168,7 +168,7 @@ impl GraphDatabase {
                 stats: Some(JsGraphStats {
                     total_nodes: stats.total_entities as u32,
                     total_edges: stats.total_hyperedges as u32,
-                    avg_degree: stats.avg_entity_degree,
+                    avg_degree: stats.avg_entity_degree as f64,
                 }),
             })
         })
@@ -194,7 +194,7 @@ impl GraphDatabase {
             stats: Some(JsGraphStats {
                 total_nodes: stats.total_entities as u32,
                 total_edges: stats.total_hyperedges as u32,
-                avg_degree: stats.avg_entity_degree,
+                avg_degree: stats.avg_entity_degree as f64,
             }),
         })
     }
@@ -343,7 +343,7 @@ impl GraphDatabase {
             for edge in edges {
                 let nodes = vec![edge.from.clone(), edge.to.clone()];
                 let embedding = edge.embedding.to_vec();
-                let confidence = edge.confidence.unwrap_or(1.0);
+                let confidence = edge.confidence.unwrap_or(1.0) as f32;
                 let core_edge = CoreHyperedge::new(nodes, edge.description, embedding, confidence);
                 let edge_id = core_edge.id.clone();
                 hg.add_hyperedge(core_edge)
@@ -390,7 +390,7 @@ impl GraphDatabase {
             Ok::<JsGraphStats, Error>(JsGraphStats {
                 total_nodes: stats.total_entities as u32,
                 total_edges: stats.total_hyperedges as u32,
-                avg_degree: stats.avg_entity_degree,
+                avg_degree: stats.avg_entity_degree as f64,
             })
         })
         .await
