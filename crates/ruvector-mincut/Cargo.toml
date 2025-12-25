@@ -109,3 +109,7 @@ required-features = ["exact"]
 name = "benchmarks"
 path = "../../examples/mincut/benchmarks/main.rs"
 required-features = ["exact"]
+
+[[example]]
+name = "subpoly_bench"
+required-features = ["exact"]
