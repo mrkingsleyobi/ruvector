@@ -5,14 +5,19 @@
     "CLAUDE_FLOW_HOOKS_ENABLED": "true",
     "CLAUDE_FLOW_TELEMETRY_ENABLED": "true",
     "CLAUDE_FLOW_REMOTE_EXECUTION": "true",
-    "CLAUDE_FLOW_CHECKPOINTS_ENABLED": "true"
+    "CLAUDE_FLOW_CHECKPOINTS_ENABLED": "true",
+    "RUVECTOR_MEMORY_BACKEND": "rvlite",
+    "RUVECTOR_WASM_SIZE_LIMIT_KB": "3072",
+    "RUVECTOR_INTELLIGENCE_ENABLED": "true",
+    "RUVECTOR_LEARNING_RATE": "0.1"
   },
   "permissions": {
     "allow": [
       "Bash(npx claude-flow:*)",
-      "Bash(npm run lint)",
-      "Bash(npm run test:*)",
+      "Bash(npm run:*)",
       "Bash(npm test:*)",
+      "Bash(cargo:*)",
+      "Bash(wasm-pack:*)",
       "Bash(git status)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
@@ -28,10 +33,13 @@
       "Bash(node:*)",
       "Bash(which:*)",
       "Bash(pwd)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(.claude/hooks:*)",
+      "Bash(.claude/intelligence:*)"
     ],
     "deny": [
-      "Bash(rm -rf /)"
+      "Bash(rm -rf /)",
+      "Bash(cargo publish:*)"
     ]
   },
   "hooks": {
@@ -41,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat | jq -r '.tool_input.command // empty' | tr '\\n' '\\0' | xargs -0 -I {} npx claude-flow@alpha hooks pre-command --command '{}' --validate-safety true --prepare-resources true"
+            "command": "/bin/bash -c 'INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r \".tool_input.command // empty\"); npx claude-flow@alpha hooks pre-command --command \"$CMD\" --validate-safety true 2>/dev/null || true; cd /workspaces/ruvector/.claude/intelligence && node cli.js pre-command \"$CMD\" 2>/dev/null || true'"
           }
         ]
       },
@@ -50,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat | jq -r '.tool_input.file_path // .tool_input.path // empty' | tr '\\n' '\\0' | xargs -0 -I {} npx claude-flow@alpha hooks pre-edit --file '{}' --auto-assign-agents true --load-context true"
+            "command": "/bin/bash -c 'INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r \".tool_input.file_path // .tool_input.path // empty\"); if [ -n \"$FILE\" ]; then npx claude-flow@alpha hooks pre-edit --file \"$FILE\" --auto-assign-agents true 2>/dev/null || true; EXT=\"${FILE##*.}\"; if [ \"$EXT\" = \"rs\" ]; then /workspaces/ruvector/.claude/hooks/rust-check.sh \"$FILE\" 2>/dev/null || true; fi; cd /workspaces/ruvector/.claude/intelligence && node cli.js pre-edit \"$FILE\" 2>/dev/null || true; fi'"
           }
         ]
       }
@@ -61,7 +69,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat | jq -r '.tool_input.command // empty' | tr '\\n' '\\0' | xargs -0 -I {} npx claude-flow@alpha hooks post-command --command '{}' --track-metrics true --store-results true"
+            "command": "/bin/bash -c 'INPUT=$(cat); CMD=$(echo \"$INPUT\" | jq -r \".tool_input.command // empty\"); SUCCESS=\"true\"; STDERR=\"\"; if echo \"$INPUT\" | jq -e \".tool_result.stderr\" 2>/dev/null | grep -q .; then SUCCESS=\"false\"; STDERR=$(echo \"$INPUT\" | jq -r \".tool_result.stderr // empty\" | head -c 500); fi; CMDTYPE=\"other\"; case \"$CMD\" in cargo*) CMDTYPE=\"cargo\";; npm*) CMDTYPE=\"npm\";; git*) CMDTYPE=\"git\";; wasm-pack*) CMDTYPE=\"wasm\";; *test*) CMDTYPE=\"test\";; *build*) CMDTYPE=\"build\";; esac; npx claude-flow@alpha hooks post-command --command \"$CMD\" --track-metrics true 2>/dev/null || true; cd /workspaces/ruvector/.claude/intelligence && node cli.js post-command \"$CMD\" \"$SUCCESS\" \"$STDERR\" 2>/dev/null || true; node metrics.js record-command \"$CMDTYPE\" \"$SUCCESS\" 2>/dev/null || true'"
           }
         ]
       },
@@ -70,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cat | jq -r '.tool_input.file_path // .tool_input.path // empty' | tr '\\n' '\\0' | xargs -0 -I {} npx claude-flow@alpha hooks post-edit --file '{}' --format true --update-memory true"
+            "command": "/bin/bash -c 'INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r \".tool_input.file_path // .tool_input.path // empty\"); if [ -n \"$FILE\" ]; then SUCCESS=\"true\"; npx claude-flow@alpha hooks post-edit --file \"$FILE\" --format true 2>/dev/null || true; EXT=\"${FILE##*.}\"; if [ \"$EXT\" = \"rs\" ]; then /workspaces/ruvector/.claude/hooks/post-rust-edit.sh \"$FILE\" 2>/dev/null || true; fi; cd /workspaces/ruvector/.claude/intelligence && node cli.js post-edit \"$FILE\" \"$SUCCESS\" 2>/dev/null || true; fi'"
           }
         ]
       }
@@ -81,7 +89,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash -c 'INPUT=$(cat); CUSTOM=$(echo \"$INPUT\" | jq -r \".custom_instructions // \\\"\\\"\"); echo \"🔄 PreCompact Guidance:\"; echo \"📋 IMPORTANT: Review CLAUDE.md in project root for:\"; echo \"   • 54 available agents and concurrent usage patterns\"; echo \"   • Swarm coordination strategies (hierarchical, mesh, adaptive)\"; echo \"   • SPARC methodology workflows with batchtools optimization\"; echo \"   • Critical concurrent execution rules (GOLDEN RULE: 1 MESSAGE = ALL OPERATIONS)\"; if [ -n \"$CUSTOM\" ]; then echo \"🎯 Custom compact instructions: $CUSTOM\"; fi; echo \"✅ Ready for compact operation\"'"
+            "command": "/bin/bash -c 'echo \"🔄 PreCompact - RuVector Intelligent Context:\"; echo \"\"; cd /workspaces/ruvector/.claude/intelligence && STATS=$(node cli.js stats 2>/dev/null | tail -n +2); echo \"🧠 LEARNED PATTERNS:\"; echo \"$STATS\" | jq -r \".topPatterns[] | \\\"   \\(.state): \\(.bestAction) (Q=\\(.qValue))\\\"\" 2>/dev/null || echo \"   No patterns yet\"; echo \"\"; echo \"🦀 KEY CRATES (42 total):\"; echo \"   ruvector-core (HNSW, SIMD) | rvlite (WASM DB)\"; echo \"   sona (ReasoningBank) | ruvector-graph (Cypher)\"; echo \"   ruvector-gnn (GNN) | ruvector-mincut (Min-Cut)\"; echo \"\"; echo \"📦 NPM: @ruvector/core, @ruvector/tiny-dancer\"; echo \"⚡ GOLDEN RULE: 1 MESSAGE = ALL OPERATIONS\"; echo \"✅ Ready for compact\"'"
           }
         ]
       },
@@ -90,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash -c 'echo \"🔄 Auto-Compact Guidance (Context Window Full):\"; echo \"📋 CRITICAL: Before compacting, ensure you understand:\"; echo \"   • All 54 agents available in .claude/agents/ directory\"; echo \"   • Concurrent execution patterns from CLAUDE.md\"; echo \"   • Batchtools optimization for 300% performance gains\"; echo \"   • Swarm coordination strategies for complex tasks\"; echo \"⚡ Apply GOLDEN RULE: Always batch operations in single messages\"; echo \"✅ Auto-compact proceeding with full agent context\"'"
+            "command": "/bin/bash -c 'echo \"🔄 Auto-Compact - Self-Learning Context:\"; echo \"\"; cd /workspaces/ruvector/.claude/intelligence && STATS=$(node cli.js stats 2>/dev/null | tail -n +2); MEM=$(echo \"$STATS\" | jq -r \".memory.total // 0\" 2>/dev/null); TRAJ=$(echo \"$STATS\" | jq -r \".trajectories // 0\" 2>/dev/null); PAT=$(echo \"$STATS\" | jq -r \".patterns // 0\" 2>/dev/null); echo \"📊 Learning Stats: $MEM memories | $TRAJ trajectories | $PAT patterns\"; echo \"\"; echo \"🎯 ARCHITECTURE:\"; echo \"   42 Rust crates | rvlite WASM orchestration\"; echo \"   @ruvector/core for native HNSW (150x faster)\"; echo \"   Q-learning from sona for action selection\"; echo \"\"; echo \"⚡ CONCURRENT: Task tool for agents, MCP for coordination\"; echo \"✅ Auto-compact with learned context\"'"
           }
         ]
       }
@@ -100,7 +108,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npx claude-flow@alpha hooks session-end --generate-summary true --persist-state true --export-metrics true"
+            "command": "/bin/bash -c 'echo \"🛑 Session ending - persisting learned state...\"; npx claude-flow@alpha hooks session-end --generate-summary true --persist-state true 2>/dev/null || true; cd /workspaces/ruvector/.claude/intelligence && STATS=$(node cli.js stats 2>/dev/null | tail -n +2); MEM=$(echo \"$STATS\" | jq -r \".memory.total // 0\" 2>/dev/null); TRAJ=$(echo \"$STATS\" | jq -r \".trajectories // 0\" 2>/dev/null); echo \"📊 Session learned: $MEM memories, $TRAJ trajectories\"; echo \"✅ Intelligence state persisted\"'"
           }
         ]
       }

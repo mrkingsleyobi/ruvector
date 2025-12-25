@@ -1,0 +1,11 @@
+{
+  "sequences": {},
+  "coedits": {},
+  "testPairs": {
+    "crates/core/src/lib.rs|crates/core/tests/lib.test.rs": {
+      "source": "crates/core/src/lib.rs",
+      "test": "crates/core/tests/lib.test.rs",
+      "editCount": 1
+    }
+  }
+}

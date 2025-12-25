@@ -1,0 +1,141 @@
+{
+  "suggestions": [
+    {
+      "id": "sug-1766696869695",
+      "suggested": "rust-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:07:49.695Z"
+    },
+    {
+      "id": "sug-1766696869696",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:07:49.696Z"
+    },
+    {
+      "id": "sug-1766696944932",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:09:04.932Z"
+    },
+    {
+      "id": "sug-1766697047022",
+      "suggested": "coder",
+      "confidence": 0,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:10:47.022Z"
+    },
+    {
+      "id": "sug-1766697047023",
+      "suggested": "rust-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:10:47.023Z"
+    },
+    {
+      "id": "sug-1766697047024",
+      "suggested": "technical-writer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:10:47.024Z"
+    },
+    {
+      "id": "sug-1766697047025",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:10:47.025Z"
+    },
+    {
+      "id": "sug-1766697051733",
+      "suggested": "rust-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:10:51.733Z"
+    },
+    {
+      "id": "sug-1766697051734",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": true,
+      "outcome": true,
+      "timestamp": "2025-12-25T21:10:51.734Z"
+    },
+    {
+      "id": "sug-1766697099517",
+      "suggested": "coder",
+      "confidence": 0,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:11:39.517Z"
+    },
+    {
+      "id": "sug-1766697575536",
+      "suggested": "reviewer",
+      "confidence": 0,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:19:35.536Z"
+    },
+    {
+      "id": "sug-1766697575537",
+      "suggested": "rust-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:19:35.537Z"
+    },
+    {
+      "id": "sug-1766697575538",
+      "suggested": "technical-writer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:19:35.538Z"
+    },
+    {
+      "id": "sug-1766697575539",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:19:35.539Z"
+    },
+    {
+      "id": "sug-1766697579838",
+      "suggested": "rust-developer",
+      "confidence": 0.8175744761936437,
+      "followed": null,
+      "outcome": null,
+      "timestamp": "2025-12-25T21:19:39.838Z"
+    },
+    {
+      "id": "sug-1766697579839",
+      "suggested": "typescript-developer",
+      "confidence": 0.8175744761936437,
+      "followed": true,
+      "outcome": true,
+      "timestamp": "2025-12-25T21:19:39.839Z"
+    }
+  ],
+  "followRates": {
+    "typescript-developer": {
+      "total": 2,
+      "followed": 2,
+      "followedSuccess": 2,
+      "ignoredSuccess": 0
+    }
+  },
+  "lastUpdated": "2025-12-25T21:07:36.675Z"
+}
