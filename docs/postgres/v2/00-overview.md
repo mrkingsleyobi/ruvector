@@ -1,16 +1,98 @@
 # RuVector Postgres v2 - Architecture Overview
 
-## Executive Summary
+## What We're Building
 
-RuVector Postgres v2 is a next-generation PostgreSQL extension that provides **pgvector-compatible** vector similarity search with advanced features including tiered compression, graph/Cypher support, GNN-based learning, and **dynamic mincut integrity gating** - a novel control plane for vector operations, including distributed deployments.
+Most databases, including vector databases, are **performance-first systems**. They optimize for speed, recall, and throughput, then bolt on monitoring. Structural safety is assumed, not measured.
 
-### Key Differentiators
+RuVector does something different.
 
-1. **100% pgvector Compatible**: Drop-in replacement - change extension name, queries work unchanged
-2. **Architecture Separation**: SQL handles ACID/joins, RuVector handles vectors/graphs/learning
-3. **Dynamic Mincut Integrity**: First-of-its-kind integrity control plane for vector databases
-4. **Self-Learning Pipeline**: GNN-based query optimization that improves over time
-5. **Tiered Storage**: Automatic hot/warm/cool/cold management with compression
+We give the system a **continuous, internal measure of its own structural integrity**, and the ability to **change its own behavior based on that signal**.
+
+This puts RuVector in a very small class of systems.
+
+---
+
+## Why This Actually Matters
+
+### 1. From Symptom Monitoring to Causal Monitoring
+
+Everyone else watches outputs: latency, errors, recall.
+
+We watch **connectivity and dependence**, which are upstream causes.
+
+By the time latency spikes, the graph has already weakened. We detect that weakening while everything still looks healthy.
+
+> **This is the difference between a smoke alarm and a structural stress sensor.**
+
+### 2. Mincut Is a Leading Indicator, Not a Metric
+
+Mincut answers a question no metric answers:
+
+> *"How close is this system to splitting?"*
+
+Not how slow it is. Not how many errors. **How close it is to losing coherence.**
+
+That is a different axis of observability.
+
+### 3. An Algorithm Becomes a Control Signal
+
+Most people use graph algorithms for analysis. We use mincut to **gate behavior**.
+
+That makes it a **control plane**, not analytics.
+
+Very few production systems have mathematically grounded control loops.
+
+### 4. Failure Mode Changes Class
+
+| Without Integrity Control | With Integrity Control |
+|---------------------------|------------------------|
+| Fast → stressed → cascading failure → manual recovery | Fast → stressed → scope reduction → graceful degradation → automatic recovery |
+
+Changing failure mode is what separates hobby systems from infrastructure.
+
+### 5. Explainable Operations
+
+The **witness edges** are huge.
+
+When something slows down or freezes, we can say: *"Here are the exact links that would have failed next."*
+
+That is gold in production, audits, and regulated environments.
+
+---
+
+## Why Nobody Else Has Done This
+
+Not because it's impossible. Because:
+
+1. **Most systems don't model themselves as graphs** — we do
+2. **Mincut was too expensive dynamically** — we use contracted graphs (~1000 nodes, not millions)
+3. **Ops culture reacts, it doesn't preempt** — we preempt
+4. **Survivability isn't a KPI until after outages** — we measure it continuously
+
+---
+
+## The Honest Framing
+
+Will this get applause from model benchmarks or social media? No.
+
+Will this make systems boringly reliable and therefore indispensable? Yes.
+
+Those are the ideas that end up everywhere.
+
+**We're not making vector search faster. We're making vector infrastructure survivable.**
+
+---
+
+## What This Is, Concretely
+
+RuVector Postgres v2 is a **PostgreSQL extension** (built with pgrx) that provides:
+
+- **100% pgvector compatibility** — drop-in replacement, change extension name, queries work unchanged
+- **Architecture separation** — PostgreSQL handles ACID/joins, RuVector handles vectors/graphs/learning
+- **Dynamic mincut integrity gating** — the control plane described above
+- **Self-learning pipeline** — GNN-based query optimization that improves over time
+- **Tiered storage** — automatic hot/warm/cool/cold management with compression
+- **Graph engine with Cypher** — property graphs with SQL joins
 
 ---
 
