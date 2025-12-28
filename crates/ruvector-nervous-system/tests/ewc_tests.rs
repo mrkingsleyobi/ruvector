@@ -86,7 +86,7 @@ fn test_fisher_information_accuracy() {
         .map(|_| {
             (0..100).map(|_| {
                 // Normal distribution with mean=0.1, std=sqrt(0.01)
-                0.1_f32 + rand_distr::StandardNormal.sample(&mut rand::thread_rng()) as f32 * true_variance.sqrt()
+                0.1_f32 + rand_distr::Distribution::<f64>::sample(&rand_distr::StandardNormal, &mut rand::thread_rng()) as f32 * true_variance.sqrt()
             }).collect()
         })
         .collect();

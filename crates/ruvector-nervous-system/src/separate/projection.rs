@@ -226,12 +226,13 @@ mod tests {
         let output_sparse = proj_sparse.project(&input).unwrap();
         let output_dense = proj_dense.project(&input).unwrap();
 
-        // Count non-zero elements
-        let nonzero_sparse = output_sparse.iter().filter(|&&x| x != 0.0).count();
-        let nonzero_dense = output_dense.iter().filter(|&&x| x != 0.0).count();
+        // Dense projection should have larger average magnitude
+        // (more connections contributing to each output)
+        let avg_sparse: f32 = output_sparse.iter().map(|x| x.abs()).sum::<f32>() / 1000.0;
+        let avg_dense: f32 = output_dense.iter().map(|x| x.abs()).sum::<f32>() / 1000.0;
 
-        // Dense projection should have more non-zero outputs
-        assert!(nonzero_dense > nonzero_sparse);
+        // 0.9 sparsity means 9x more connections, so roughly sqrt(9) = 3x larger magnitude
+        assert!(avg_dense > avg_sparse, "Dense avg={} should be > sparse avg={}", avg_dense, avg_sparse);
     }
 
     #[test]

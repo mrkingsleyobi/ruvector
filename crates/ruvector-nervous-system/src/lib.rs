@@ -140,13 +140,14 @@ mod tests {
         let v1 = Hypervector::random();
         let v2 = Hypervector::random();
 
-        // Similarity of random vectors should be ~0.5
+        // Similarity of random vectors should be ~0.0 (50% bit overlap)
+        // Formula: 1 - 2*hamming/dim = 1 - 2*0.5 = 0
         let sim = v1.similarity(&v2);
-        assert!(sim > 0.3 && sim < 0.7);
+        assert!(sim > -0.2 && sim < 0.2, "random similarity: {}", sim);
 
-        // Binding
+        // Binding produces ~0 similarity with original
         let bound = v1.bind(&v2);
-        assert!(bound.similarity(&v1) > 0.3);
+        assert!(bound.similarity(&v1) > -0.2, "bound similarity: {}", bound.similarity(&v1));
 
         // Memory
         let mut memory = HdcMemory::new();

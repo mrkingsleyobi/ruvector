@@ -367,7 +367,8 @@ mod tests {
         let b = Hypervector::random();
 
         let sim = a.similarity(&b);
-        assert!(sim >= 0.0 && sim <= 1.0);
+        // Cosine similarity formula: 1 - 2*hamming/dim gives range [-1, 1]
+        assert!(sim >= -1.0 && sim <= 1.0, "similarity out of bounds: {}", sim);
     }
 
     #[test]
@@ -379,13 +380,14 @@ mod tests {
     }
 
     #[test]
-    fn test_similarity_random_approximately_half() {
+    fn test_similarity_random_approximately_zero() {
         let a = Hypervector::random();
         let b = Hypervector::random();
 
         let sim = a.similarity(&b);
-        // Random vectors should be orthogonal (~0.5 similarity)
-        assert!(sim > 0.3 && sim < 0.7, "similarity: {}", sim);
+        // Random vectors have ~50% bit overlap, so similarity ≈ 0.0
+        // 1 - 2*(5000/10000) = 1 - 1 = 0
+        assert!(sim > -0.2 && sim < 0.2, "similarity: {}", sim);
     }
 
     #[test]

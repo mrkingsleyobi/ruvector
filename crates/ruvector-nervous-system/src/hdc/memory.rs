@@ -372,8 +372,8 @@ mod tests {
         let results = memory.retrieve(&v1, 0.99);
         assert_eq!(results.len(), 1);
 
-        // Low threshold should return all
-        let results = memory.retrieve(&v1, 0.0);
+        // Low threshold (-1.0 is min similarity) should return all
+        let results = memory.retrieve(&v1, -1.0);
         assert_eq!(results.len(), 3);
     }
 

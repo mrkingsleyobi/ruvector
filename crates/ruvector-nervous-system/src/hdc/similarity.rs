@@ -204,7 +204,8 @@ mod tests {
         let v2 = Hypervector::random();
 
         let sim = cosine_similarity(&v1, &v2);
-        assert!(sim >= 0.0 && sim <= 1.0);
+        // Cosine similarity for binary vectors: 1 - 2*hamming/dim gives [-1, 1]
+        assert!(sim >= -1.0 && sim <= 1.0, "similarity out of bounds: {}", sim);
     }
 
     #[test]
@@ -306,7 +307,8 @@ mod tests {
 
         for row in &matrix {
             for &sim in row {
-                assert!(sim >= 0.0 && sim <= 1.0);
+                // Similarity range is [-1, 1] for cosine similarity
+                assert!(sim >= -1.0 && sim <= 1.0, "similarity out of bounds: {}", sim);
             }
         }
     }

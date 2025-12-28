@@ -19,8 +19,8 @@
 /// ```rust
 /// use ruvector_nervous_system::hopfield::theoretical_capacity;
 ///
-/// assert_eq!(theoretical_capacity(128), 2_u64.pow(64));
-/// assert_eq!(theoretical_capacity(256), 2_u64.pow(128));
+/// assert_eq!(theoretical_capacity(64), 2_u64.pow(32));  // 4 billion patterns
+/// assert_eq!(theoretical_capacity(128), u64::MAX);      // saturates for d >= 128
 /// ```
 pub fn theoretical_capacity(dimension: usize) -> u64 {
     let exponent = dimension / 2;
@@ -169,7 +169,9 @@ mod tests {
         assert_eq!(theoretical_capacity(2), 2);
         assert_eq!(theoretical_capacity(4), 4);
         assert_eq!(theoretical_capacity(8), 16);
-        assert_eq!(theoretical_capacity(128), 2_u64.pow(64));
+        assert_eq!(theoretical_capacity(64), 2_u64.pow(32));
+        // d=128 has exponent=64 which saturates
+        assert_eq!(theoretical_capacity(128), u64::MAX);
     }
 
     #[test]

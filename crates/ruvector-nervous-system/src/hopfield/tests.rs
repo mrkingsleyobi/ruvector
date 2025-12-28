@@ -199,8 +199,8 @@ fn test_theoretical_capacity() {
     let hopfield = ModernHopfield::new(128, 1.0);
     let capacity = hopfield.capacity();
 
-    // For 128 dimensions, capacity = 2^64
-    assert_eq!(capacity, 2_u64.pow(64));
+    // For 128 dimensions, capacity saturates to u64::MAX (exponent = 64)
+    assert_eq!(capacity, u64::MAX);
 }
 
 #[test]
