@@ -54,7 +54,7 @@ Query → HNSW Index → GNN Layer → Enhanced Results
 ```
 
 The GNN layer:
-1. Takes your query and its nearest neighborsa
+1. Takes your query and its nearest neighbors
 2. Applies multi-head attention to weigh which neighbors matter
 3. Updates representations based on graph structure
 4. Returns better-ranked results
@@ -582,7 +582,7 @@ The hooks integrate with Claude Code's event system:
 
 | Crate/Package | Description | Status |
 |---------------|-------------|--------|
-| [ruvector-cli hooks](./crates/ruvector-cli) | Rust CLI with 29 hooks commands | [![crates.io](https://img.shields.io/crates/v/ruvector-cli.svg)](https://crates.io/crates/ruvector-cli) |
+| [ruvector-cli hooks](./crates/ruvector-cli) | Rust CLI with 31 hooks commands | [![crates.io](https://img.shields.io/crates/v/ruvector-cli.svg)](https://crates.io/crates/ruvector-cli) |
 | [@ruvector/cli hooks](./npm/packages/cli) | npm CLI with 26 hooks commands | [![npm](https://img.shields.io/npm/v/@ruvector/cli.svg)](https://www.npmjs.com/package/@ruvector/cli) |
 
 #### Quick Start
@@ -632,7 +632,7 @@ ruvector hooks install                   # Install into Claude settings
 
 # Core
 ruvector hooks stats                     # Show intelligence statistics
-ruvector hooks session-start             # Start a new session
+ruvector hooks session-start [--resume]  # Start/resume a session
 ruvector hooks session-end               # End session with metrics
 
 # Memory
@@ -649,6 +649,9 @@ ruvector hooks pre-edit <file>           # Pre-edit intelligence hook
 ruvector hooks post-edit <file> --success  # Post-edit learning hook
 ruvector hooks pre-command <cmd>         # Pre-command hook
 ruvector hooks post-command <cmd> --success  # Post-command hook
+ruvector hooks suggest-context           # UserPromptSubmit context injection
+ruvector hooks track-notification        # Track notification patterns
+ruvector hooks pre-compact [--auto]      # Pre-compact hook (auto/manual)
 
 # Intelligence
 ruvector hooks record-error <cmd> <stderr>  # Record error pattern
