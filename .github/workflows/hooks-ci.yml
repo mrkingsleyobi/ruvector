@@ -52,7 +52,7 @@ jobs:
           ./target/release/ruvector hooks session-start
           ./target/release/ruvector hooks pre-edit src/main.rs
           ./target/release/ruvector hooks post-edit --success src/main.rs
-          ./target/release/ruvector hooks remember --type test "CI test content"
+          ./target/release/ruvector hooks remember --memory-type test "CI test content"
           ./target/release/ruvector hooks recall "CI test"
           ./target/release/ruvector hooks learn test-state test-action --reward 0.5
           ./target/release/ruvector hooks suggest edit-rs --actions coder,reviewer
