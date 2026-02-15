@@ -31,6 +31,7 @@ pub mod safety_net;
 pub mod seed_crypto;
 pub mod status;
 pub mod store;
+pub mod witness;
 pub mod write_path;
 
 pub use adversarial::{
@@ -61,3 +62,6 @@ pub use safety_net::{
 };
 pub use status::StoreStatus;
 pub use store::RvfStore;
+pub use witness::{
+    GovernancePolicy, ParsedWitness, ScorecardBuilder, WitnessBuilder, WitnessError,
+};

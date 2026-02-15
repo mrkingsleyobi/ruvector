@@ -37,6 +37,7 @@ pub mod qr_seed;
 pub mod security;
 pub mod sha256;
 pub mod wasm_bootstrap;
+pub mod witness;
 
 pub use attestation::{AttestationHeader, AttestationWitnessType, TeePlatform, KEY_TYPE_TEE_BOUND};
 pub use ebpf::{
@@ -88,6 +89,14 @@ pub use qr_seed::{
 };
 pub use security::{HardeningFields, SecurityError, SecurityPolicy};
 pub use sha256::{sha256, hmac_sha256, Sha256};
+pub use witness::{
+    GovernanceMode, PolicyCheck, Scorecard, TaskOutcome, ToolCallEntry,
+    WitnessHeader, WITNESS_MAGIC, WITNESS_HEADER_SIZE,
+    WIT_SIGNED, WIT_HAS_SPEC, WIT_HAS_PLAN, WIT_HAS_TRACE,
+    WIT_HAS_DIFF, WIT_HAS_TEST_LOG, WIT_HAS_POSTMORTEM,
+    WIT_TAG_SPEC, WIT_TAG_PLAN, WIT_TAG_TRACE, WIT_TAG_DIFF,
+    WIT_TAG_TEST_LOG, WIT_TAG_POSTMORTEM,
+};
 pub use wasm_bootstrap::{
     WasmHeader, WasmRole, WasmTarget, WASM_MAGIC,
     WASM_FEAT_SIMD, WASM_FEAT_BULK_MEMORY, WASM_FEAT_MULTI_VALUE,
