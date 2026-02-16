@@ -10,19 +10,24 @@
 //!    solve paths → identical outcomes. No network, no randomness, no clock.
 //!
 //! 2. **Witness chain**: Every puzzle decision (skip_mode chosen, context bucket,
-//!    steps taken, correct/wrong) is hashed into a SHA-256 chain. Changing any
-//!    single bit in any record invalidates the entire chain from that point.
+//!    steps taken, correct/wrong) is hashed into a SHAKE-256 chain using the
+//!    native `rvf-crypto` witness infrastructure. Changing any single bit in
+//!    any record invalidates the entire chain from that point.
 //!
 //! 3. **Graded scorecard**: Per-mode (A/B/C) aggregate metrics plus ablation
 //!    assertions, all serialized to JSON.
 //!
-//! 4. **Verification**: Re-run with same config → re-generate chain → compare
+//! 4. **Binary .rvf output**: The witness chain is also written as a native
+//!    WITNESS_SEG (0x0A) + META_SEG (0x07) in the RVF wire format, producing
+//!    a `.rvf` file verifiable by any RVF-compatible tool or WASM runtime.
+//!
+//! 5. **Verification**: Re-run with same config → re-generate chain → compare
 //!    chain root hash. If it matches, outcomes are identical.
 //!
 //! ## Usage
 //!
 //! ```bash
-//! # Generate the manifest
+//! # Generate the manifest (JSON + optional .rvf binary)
 //! cargo run --bin acceptance-rvf -- generate --output manifest.json
 //!
 //! # Verify a previously generated manifest
@@ -33,8 +38,8 @@ use crate::acceptance_test::{
     AblationMode, HoldoutConfig, run_acceptance_test_mode,
 };
 use crate::temporal::PolicyKernel;
+use rvf_crypto::shake256_256;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -95,12 +100,12 @@ impl WitnessRecord {
 
 /// A witness record with its chain hash.
 ///
-/// `chain_hash` = SHA-256(prev_chain_hash || canonical_bytes(record))
+/// `chain_hash` = SHAKE-256(prev_chain_hash || canonical_bytes(record))
 /// First record: prev_chain_hash = [0; 32] (genesis)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChainedWitness {
     pub record: WitnessRecord,
-    /// Hex-encoded SHA-256 chain hash for this entry
+    /// Hex-encoded SHAKE-256 chain hash for this entry
     pub chain_hash: String,
 }
 
@@ -181,7 +186,7 @@ pub struct RvfManifest {
     pub all_passed: bool,
     /// Witness chain (every puzzle decision, hash-linked)
     pub witness_chain: Vec<ChainedWitness>,
-    /// SHA-256 of the final chain entry (hex). This is THE reproducibility proof.
+    /// SHAKE-256 of the final chain entry (hex). This is THE reproducibility proof.
     pub chain_root_hash: String,
     /// Total witness records in the chain
     pub chain_length: usize,
@@ -218,9 +223,14 @@ impl From<&HoldoutConfig> for ManifestConfig {
 // Witness chain builder
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Builds a SHA-256-linked witness chain incrementally.
+/// Builds a SHAKE-256-linked witness chain incrementally.
+///
+/// Uses `rvf_crypto::shake256_256` for hashing, compatible with the
+/// native RVF WITNESS_SEG format.
 pub struct WitnessChainBuilder {
     entries: Vec<ChainedWitness>,
+    /// Parallel rvf-crypto WitnessEntry list for .rvf binary export
+    rvf_entries: Vec<rvf_crypto::WitnessEntry>,
     prev_hash: [u8; 32],
     seq: usize,
 }
@@ -229,6 +239,7 @@ impl WitnessChainBuilder {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            rvf_entries: Vec::new(),
             prev_hash: [0u8; 32],
             seq: 0,
         }
@@ -236,16 +247,29 @@ impl WitnessChainBuilder {
 
     /// Append a witness record to the chain.
     ///
-    /// The chain hash is: SHA-256(prev_hash || canonical_bytes(record))
+    /// The chain hash is: SHAKE-256(prev_hash || canonical_bytes(record))
+    /// Also builds the parallel rvf-crypto WitnessEntry for .rvf export.
     pub fn append(&mut self, mut record: WitnessRecord) {
         record.seq = self.seq;
         self.seq += 1;
 
         let canonical = record.canonical_bytes();
-        let mut hasher = Sha256::new();
-        hasher.update(&self.prev_hash);
-        hasher.update(&canonical);
-        let hash: [u8; 32] = hasher.finalize().into();
+        // Compute the action_hash from canonical bytes using SHAKE-256
+        let action_hash = shake256_256(&canonical);
+
+        // Chain: SHAKE-256(prev_hash || canonical_bytes)
+        let mut chain_input = Vec::with_capacity(32 + canonical.len());
+        chain_input.extend_from_slice(&self.prev_hash);
+        chain_input.extend_from_slice(&canonical);
+        let hash = shake256_256(&chain_input);
+
+        // Build the rvf-crypto WitnessEntry (73-byte entry for .rvf binary)
+        self.rvf_entries.push(rvf_crypto::WitnessEntry {
+            prev_hash: [0u8; 32], // overwritten by create_witness_chain
+            action_hash,
+            timestamp_ns: self.seq as u64, // deterministic pseudo-timestamp
+            witness_type: 0x02, // COMPUTATION witness type
+        });
 
         self.prev_hash = hash;
         self.entries.push(ChainedWitness {
@@ -258,6 +282,11 @@ impl WitnessChainBuilder {
     pub fn finalize(self) -> (Vec<ChainedWitness>, String) {
         let root = hex_encode(&self.prev_hash);
         (self.entries, root)
+    }
+
+    /// Get the rvf-crypto WitnessEntry list for .rvf binary export.
+    pub fn rvf_entries(&self) -> &[rvf_crypto::WitnessEntry] {
+        &self.rvf_entries
     }
 }
 
@@ -278,10 +307,10 @@ pub fn verify_chain(chain: &[ChainedWitness]) -> Result<String, usize> {
 
     for (i, entry) in chain.iter().enumerate() {
         let canonical = entry.record.canonical_bytes();
-        let mut hasher = Sha256::new();
-        hasher.update(&prev_hash);
-        hasher.update(&canonical);
-        let computed: [u8; 32] = hasher.finalize().into();
+        let mut chain_input = Vec::with_capacity(32 + canonical.len());
+        chain_input.extend_from_slice(&prev_hash);
+        chain_input.extend_from_slice(&canonical);
+        let computed = shake256_256(&chain_input);
         let computed_hex = hex_encode(&computed);
 
         if computed_hex != entry.chain_hash {
@@ -300,7 +329,16 @@ pub fn verify_chain(chain: &[ChainedWitness]) -> Result<String, usize> {
 /// Run all three ablation modes and produce the publishable RVF manifest.
 ///
 /// This is the entry point. Same config → same manifest → same chain_root_hash.
+/// If `rvf_output_path` is provided, also exports the native `.rvf` binary.
 pub fn generate_manifest(config: &HoldoutConfig) -> anyhow::Result<RvfManifest> {
+    generate_manifest_with_rvf(config, None)
+}
+
+/// Like `generate_manifest`, but also produces a `.rvf` binary file.
+pub fn generate_manifest_with_rvf(
+    config: &HoldoutConfig,
+    rvf_output_path: Option<&str>,
+) -> anyhow::Result<RvfManifest> {
     let mut chain_builder = WitnessChainBuilder::new();
 
     // Run all three modes
@@ -332,14 +370,32 @@ pub fn generate_manifest(config: &HoldoutConfig) -> anyhow::Result<RvfManifest> 
         && mode_b.result.passed
         && mode_c.result.passed;
 
+    // Export .rvf binary before finalizing (consumes chain_builder entries)
+    if let Some(rvf_path) = rvf_output_path {
+        // Build the manifest struct first for the meta segment
+        let preview_manifest = RvfManifest {
+            version: 2,
+            description: String::new(),
+            config: ManifestConfig::from(config),
+            scorecards: scorecards.clone(),
+            assertions: assertions.clone(),
+            all_passed,
+            witness_chain: vec![],
+            chain_root_hash: String::new(),
+            chain_length: chain_builder.rvf_entries().len(),
+        };
+        export_rvf_binary(&preview_manifest, &chain_builder, rvf_path)?;
+    }
+
     // Finalize witness chain
     let (witness_chain, chain_root_hash) = chain_builder.finalize();
     let chain_length = witness_chain.len();
 
     Ok(RvfManifest {
-        version: 1,
+        version: 2,
         description: "RuVector temporal reasoning ablation study — \
-            deterministic acceptance test with SHA-256 witness chain"
+            deterministic acceptance test with SHAKE-256 witness chain \
+            (rvf-crypto native)"
             .to_string(),
         config: ManifestConfig::from(config),
         scorecards,
@@ -430,6 +486,106 @@ impl VerifyResult {
     pub fn passed(&self) -> bool {
         self.chain_integrity && self.outcomes_match && self.root_hash_match
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Native .rvf binary export
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Export the manifest as a native `.rvf` binary file.
+///
+/// Produces a file with two segments:
+/// - **WITNESS_SEG** (0x0A): The SHAKE-256 witness chain as 73-byte entries
+///   created by `rvf_crypto::create_witness_chain()`, verifiable by any
+///   RVF-compatible tool including the WASM microkernel.
+/// - **META_SEG** (0x07): JSON-encoded scorecard + assertions metadata.
+///
+/// The resulting file is a valid `.rvf` file that can be inspected with
+/// `rvf inspect`, verified with `rvf verify-witness`, or loaded in the
+/// browser via the WASM runtime's `rvf_witness_verify` export.
+pub fn export_rvf_binary(
+    manifest: &RvfManifest,
+    chain_builder: &WitnessChainBuilder,
+    path: &str,
+) -> anyhow::Result<()> {
+    use rvf_crypto::create_witness_chain;
+    use rvf_types::{SegmentFlags, SegmentType};
+    use rvf_wire::write_segment;
+
+    // Build the native SHAKE-256 witness chain from the rvf-crypto entries
+    let witness_bytes = create_witness_chain(chain_builder.rvf_entries());
+
+    // Write WITNESS_SEG (0x0A) with SEALED flag
+    let witness_seg = write_segment(
+        SegmentType::Witness as u8,
+        &witness_bytes,
+        SegmentFlags::empty().with(SegmentFlags::SEALED),
+        1, // segment_id
+    );
+
+    // Build metadata JSON payload
+    let meta = serde_json::json!({
+        "format": "rvf-acceptance-test",
+        "version": manifest.version,
+        "chain_root_hash": manifest.chain_root_hash,
+        "chain_length": manifest.chain_length,
+        "all_passed": manifest.all_passed,
+        "config": manifest.config,
+        "scorecards": manifest.scorecards,
+        "assertions": manifest.assertions,
+    });
+    let meta_bytes = serde_json::to_vec(&meta)?;
+
+    // Write META_SEG (0x07)
+    let meta_seg = write_segment(
+        SegmentType::Meta as u8,
+        &meta_bytes,
+        SegmentFlags::empty().with(SegmentFlags::SEALED),
+        2, // segment_id
+    );
+
+    // Concatenate segments into a single .rvf file
+    let mut rvf_file = Vec::with_capacity(witness_seg.len() + meta_seg.len());
+    rvf_file.extend_from_slice(&witness_seg);
+    rvf_file.extend_from_slice(&meta_seg);
+
+    std::fs::write(path, &rvf_file)?;
+    Ok(())
+}
+
+/// Verify the native `.rvf` binary witness chain.
+///
+/// Reads the WITNESS_SEG payload and runs `rvf_crypto::verify_witness_chain`.
+pub fn verify_rvf_binary(path: &str) -> anyhow::Result<usize> {
+    use rvf_crypto::verify_witness_chain;
+    use rvf_types::SEGMENT_HEADER_SIZE;
+
+    let data = std::fs::read(path)?;
+    if data.len() < SEGMENT_HEADER_SIZE {
+        anyhow::bail!("File too small for a valid segment");
+    }
+
+    // Parse the first segment header to get payload length
+    let seg_type = data[5];
+    if seg_type != 0x0A {
+        anyhow::bail!("First segment is not WITNESS_SEG (got 0x{:02X})", seg_type);
+    }
+
+    let payload_len = u64::from_le_bytes(
+        data[0x10..0x18].try_into().map_err(|_| anyhow::anyhow!("Bad header"))?
+    ) as usize;
+
+    let payload_start = SEGMENT_HEADER_SIZE;
+    let payload_end = payload_start + payload_len;
+    if data.len() < payload_end {
+        anyhow::bail!("Truncated witness payload");
+    }
+
+    let witness_data = &data[payload_start..payload_end];
+    let entries = verify_witness_chain(witness_data)
+        .map_err(|e| anyhow::anyhow!("Witness chain verification failed: {:?}", e))?;
+
+    Ok(entries.len())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -787,7 +943,7 @@ mod tests {
             ..Default::default()
         };
         let manifest = generate_manifest(&config).unwrap();
-        assert_eq!(manifest.version, 1);
+        assert_eq!(manifest.version, 2);
         assert_eq!(manifest.scorecards.len(), 3);
         assert!(!manifest.chain_root_hash.is_empty());
         assert!(manifest.chain_length > 0);

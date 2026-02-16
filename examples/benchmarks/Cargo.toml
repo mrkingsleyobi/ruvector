@@ -44,6 +44,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Crypto for witness chains
 sha2 = "0.10"
 
+# RVF native format integration
+rvf-types = { path = "../../crates/rvf/rvf-types" }
+rvf-crypto = { path = "../../crates/rvf/rvf-crypto" }
+rvf-wire = { path = "../../crates/rvf/rvf-wire" }
+
 # Statistics
 statistical = "1.0"
 hdrhistogram = "7.5"

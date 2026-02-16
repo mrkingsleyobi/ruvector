@@ -1,10 +1,11 @@
 //! Publishable RVF Acceptance Test — CLI entry point.
 //!
 //! Generates or verifies a deterministic acceptance test manifest with
-//! SHA-256 witness chain. Same seed → same outcomes → same root hash.
+//! SHAKE-256 witness chain (rvf-crypto native). Same seed → same outcomes
+//! → same root hash.
 //!
 //! ```bash
-//! # Generate manifest (default config)
+//! # Generate manifest (JSON + .rvf binary)
 //! cargo run --bin acceptance-rvf -- generate -o manifest.json
 //!
 //! # Generate with custom config
@@ -13,15 +14,20 @@
 //!
 //! # Verify a manifest (re-runs and compares root hash)
 //! cargo run --bin acceptance-rvf -- verify -i manifest.json
+//!
+//! # Verify the .rvf binary witness chain
+//! cargo run --bin acceptance-rvf -- verify-rvf -i acceptance_manifest.rvf
 //! ```
 
 use clap::{Parser, Subcommand};
 use ruvector_benchmarks::acceptance_test::HoldoutConfig;
-use ruvector_benchmarks::publishable_rvf::{generate_manifest, verify_manifest};
+use ruvector_benchmarks::publishable_rvf::{
+    generate_manifest_with_rvf, verify_manifest, verify_rvf_binary,
+};
 
 #[derive(Parser)]
 #[command(name = "acceptance-rvf")]
-#[command(about = "Publishable RVF acceptance test with witness chain verification")]
+#[command(about = "Publishable RVF acceptance test with SHAKE-256 witness chain")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -29,7 +35,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate a new acceptance test manifest
+    /// Generate a new acceptance test manifest (JSON + .rvf binary)
     Generate {
         /// Output JSON file path
         #[arg(short, long, default_value = "acceptance_manifest.json")]
@@ -61,6 +67,12 @@ enum Commands {
         #[arg(short, long)]
         input: String,
     },
+    /// Verify a native .rvf binary witness chain
+    VerifyRvf {
+        /// Input .rvf file path
+        #[arg(short, long)]
+        input: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -86,17 +98,21 @@ fn main() -> anyhow::Result<()> {
                 ..Default::default()
             };
 
+            // Derive .rvf path from JSON output path
+            let rvf_path = output.replace(".json", ".rvf");
+
             println!("Generating acceptance test manifest...");
             println!("  holdout={}, training={}, cycles={}, budget={}",
                 holdout, training, cycles, budget);
             println!();
 
-            let manifest = generate_manifest(&config)?;
+            let manifest = generate_manifest_with_rvf(&config, Some(&rvf_path))?;
             manifest.print_summary();
 
             let json = serde_json::to_string_pretty(&manifest)?;
             std::fs::write(&output, &json)?;
-            println!("  Manifest written to: {}", output);
+            println!("  JSON manifest:  {}", output);
+            println!("  RVF binary:     {}", rvf_path);
             println!("  Chain root hash: {}", manifest.chain_root_hash);
             println!();
 
@@ -126,6 +142,19 @@ fn main() -> anyhow::Result<()> {
             } else {
                 println!("  VERIFICATION: FAILED — outcomes differ");
                 std::process::exit(1);
+            }
+        }
+        Commands::VerifyRvf { input } => {
+            println!("Verifying .rvf witness chain: {}", input);
+            match verify_rvf_binary(&input) {
+                Ok(count) => {
+                    println!("  WITNESS_SEG verified: {} entries, chain intact", count);
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    println!("  VERIFICATION FAILED: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
     }

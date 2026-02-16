@@ -540,7 +540,7 @@ An `.rvf` file is a sequence of 64-byte-aligned segments. Each segment has a sel
 | `rvf-kernel` | 2,400+ | Real Linux kernel builder, cpio/newc initramfs, Docker build, SHA3-256 verification |
 | `rvf-launch` | 1,200+ | QEMU microvm launcher, KVM/TCG detection, QMP shutdown protocol |
 | `rvf-ebpf` | 1,100+ | Real BPF C compiler (XDP, socket filter, TC), vmlinux.h generation |
-| `rvf-wasm` | 1,616 | WASM control plane: in-memory store, query, segment inspection (~46 KB) |
+| `rvf-wasm` | 1,700+ | WASM control plane: in-memory store, query, segment inspection, witness chain verification (~46 KB) |
 | `rvf-node` | 852 | Node.js N-API bindings with lineage, kernel/eBPF, and inspection |
 | `rvf-cli` | 1,800+ | Unified CLI with 17 subcommands (create, ingest, query, delete, status, inspect, compact, derive, serve, launch, embed-kernel, embed-ebpf, filter, freeze, verify-witness, verify-attestation, rebuild-refcounts) |
 | `rvf-server` | 1,165 | HTTP REST + TCP streaming server |

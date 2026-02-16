@@ -1821,6 +1821,7 @@ name = "rvf-wasm"
 version = "0.1.0"
 dependencies = [
  "dlmalloc",
+ "rvf-crypto",
  "rvf-types",
 ]
 
