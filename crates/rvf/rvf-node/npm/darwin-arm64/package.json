@@ -12,5 +12,9 @@
   "license": "MIT",
   "os": [
     "darwin"
-  ]
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  }
 }
