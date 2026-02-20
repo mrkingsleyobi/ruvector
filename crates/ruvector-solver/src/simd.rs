@@ -120,6 +120,91 @@ unsafe fn horizontal_sum_f32x8(v: std::arch::x86_64::__m256) -> f32 {
     _mm_cvtss_f32(result)
 }
 
+/// Sparse matrix-vector multiply with optional SIMD acceleration for f64.
+///
+/// Computes `y = A * x` where `A` is a CSR matrix of `f64` values.
+pub fn spmv_simd_f64(matrix: &CsrMatrix<f64>, x: &[f64], y: &mut [f64]) {
+    assert_eq!(x.len(), matrix.cols, "x length must equal matrix.cols");
+    assert_eq!(y.len(), matrix.rows, "y length must equal matrix.rows");
+
+    #[cfg(all(feature = "simd", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                spmv_avx2_f64(matrix, x, y);
+            }
+            return;
+        }
+    }
+
+    spmv_scalar_f64(matrix, x, y);
+}
+
+/// Scalar fallback for f64 SpMV.
+pub fn spmv_scalar_f64(matrix: &CsrMatrix<f64>, x: &[f64], y: &mut [f64]) {
+    for i in 0..matrix.rows {
+        let start = matrix.row_ptr[i];
+        let end = matrix.row_ptr[i + 1];
+        let mut sum = 0.0f64;
+        for idx in start..end {
+            let col = matrix.col_indices[idx];
+            sum += matrix.values[idx] * x[col];
+        }
+        y[i] = sum;
+    }
+}
+
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn spmv_avx2_f64(matrix: &CsrMatrix<f64>, x: &[f64], y: &mut [f64]) {
+    use std::arch::x86_64::*;
+
+    for i in 0..matrix.rows {
+        let start = matrix.row_ptr[i];
+        let end = matrix.row_ptr[i + 1];
+        let len = end - start;
+
+        let mut accum = _mm256_setzero_pd();
+        let chunks = len / 4;
+        let remainder = len % 4;
+
+        for chunk in 0..chunks {
+            let base = start + chunk * 4;
+            let vals = _mm256_loadu_pd(matrix.values.as_ptr().add(base));
+
+            let mut x_buf = [0.0f64; 4];
+            for k in 0..4 {
+                let col = *matrix.col_indices.get_unchecked(base + k);
+                x_buf[k] = *x.get_unchecked(col);
+            }
+            let x_vec = _mm256_loadu_pd(x_buf.as_ptr());
+            accum = _mm256_add_pd(accum, _mm256_mul_pd(vals, x_vec));
+        }
+
+        let mut sum = horizontal_sum_f64x4(accum);
+
+        let tail_start = start + chunks * 4;
+        for idx in tail_start..(tail_start + remainder) {
+            let col = *matrix.col_indices.get_unchecked(idx);
+            sum += *matrix.values.get_unchecked(idx) * *x.get_unchecked(col);
+        }
+
+        *y.get_unchecked_mut(i) = sum;
+    }
+}
+
+#[cfg(all(feature = "simd", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn horizontal_sum_f64x4(v: std::arch::x86_64::__m256d) -> f64 {
+    use std::arch::x86_64::*;
+    let hi = _mm256_extractf128_pd(v, 1);
+    let lo = _mm256_castpd256_pd128(v);
+    let sum128 = _mm_add_pd(lo, hi);
+    let hi64 = _mm_unpackhi_pd(sum128, sum128);
+    let result = _mm_add_sd(sum128, hi64);
+    _mm_cvtsd_f64(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +243,39 @@ mod tests {
         assert!((y[0] - 5.0).abs() < 1e-6);
         assert!((y[1] - 6.0).abs() < 1e-6);
         assert!((y[2] - 13.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn spmv_simd_f64_correctness() {
+        let mat = CsrMatrix::<f64> {
+            values: vec![2.0, 1.0, 3.0, 1.0, 4.0],
+            col_indices: vec![0, 2, 1, 0, 2],
+            row_ptr: vec![0, 2, 3, 5],
+            rows: 3,
+            cols: 3,
+        };
+        let x = vec![1.0, 2.0, 3.0];
+        let mut y = vec![0.0f64; 3];
+        spmv_simd_f64(&mat, &x, &mut y);
+        assert!((y[0] - 5.0).abs() < 1e-10);
+        assert!((y[1] - 6.0).abs() < 1e-10);
+        assert!((y[2] - 13.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn scalar_spmv_f64_correctness() {
+        let mat = CsrMatrix::<f64> {
+            values: vec![2.0, 1.0, 3.0, 1.0, 4.0],
+            col_indices: vec![0, 2, 1, 0, 2],
+            row_ptr: vec![0, 2, 3, 5],
+            rows: 3,
+            cols: 3,
+        };
+        let x = vec![1.0, 2.0, 3.0];
+        let mut y = vec![0.0f64; 3];
+        spmv_scalar_f64(&mat, &x, &mut y);
+        assert!((y[0] - 5.0).abs() < 1e-10);
+        assert!((y[1] - 6.0).abs() < 1e-10);
+        assert!((y[2] - 13.0).abs() < 1e-10);
     }
 }

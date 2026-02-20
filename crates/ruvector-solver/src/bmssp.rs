@@ -404,7 +404,7 @@ fn transpose_csr(a: &CsrMatrix<f64>) -> CsrMatrix<f64> {
 /// than reallocated, making this efficient for the moderate-sized matrices
 /// produced during hierarchy construction.
 fn sparse_matmul(a: &CsrMatrix<f64>, b: &CsrMatrix<f64>) -> CsrMatrix<f64> {
-    debug_assert_eq!(
+    assert_eq!(
         a.cols, b.rows,
         "sparse_matmul: dimension mismatch {}x{} * {}x{}",
         a.rows, a.cols, b.rows, b.cols
@@ -535,11 +535,14 @@ fn dense_direct_solve(matrix: &CsrMatrix<f64>, b: &[f64]) -> Vec<f64> {
         }
 
         if max_row != col {
-            for k in 0..stride {
-                let a_idx = col * stride + k;
-                let b_idx = max_row * stride + k;
-                aug.swap(a_idx, b_idx);
-            }
+            let (first, second) = if col < max_row {
+                let (left, right) = aug.split_at_mut(max_row * stride);
+                (&mut left[col * stride..col * stride + stride], &mut right[..stride])
+            } else {
+                let (left, right) = aug.split_at_mut(col * stride);
+                (&mut right[..stride], &mut left[max_row * stride..max_row * stride + stride])
+            };
+            first.swap_with_slice(second);
         }
 
         let pivot = aug[col * stride + col];
@@ -769,6 +772,7 @@ impl SolverEngine for BmsspSolver {
 
         // Solve phase: iterate V-cycles.
         let mut x = vec![0.0f64; n];
+        let mut ax_buf = vec![0.0f64; n];
         let mut convergence_history = Vec::with_capacity(max_iter);
 
         let b_norm = {
@@ -804,7 +808,8 @@ impl SolverEngine for BmsspSolver {
 
             v_cycle(&hierarchy, &mut x, rhs, 0);
 
-            let res = residual_l2(matrix, &x, rhs);
+            matrix.spmv(&x, &mut ax_buf);
+            let res = (0..n).map(|i| { let r = rhs[i] - ax_buf[i]; r * r }).sum::<f64>().sqrt();
 
             convergence_history.push(ConvergenceInfo {
                 iteration: iter,

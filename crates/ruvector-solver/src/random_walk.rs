@@ -429,7 +429,7 @@ impl SolverEngine for HybridRandomWalkSolver {
             cdf.push(cumulative);
         }
 
-        let walks = self.num_walks.min(budget.max_iterations * 10);
+        let walks = self.num_walks.min(budget.max_iterations.saturating_mul(10));
         let mut counts = vec![0.0f64; n];
 
         for _ in 0..walks {

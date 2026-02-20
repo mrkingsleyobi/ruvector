@@ -120,7 +120,7 @@ impl TrueSolver {
     ) -> Vec<(usize, usize, f32)> {
         let scale = 1.0 / (k as f64).sqrt();
         let scale_f32 = scale as f32;
-        let mut entries = Vec::new();
+        let mut entries = Vec::with_capacity(((k * n) as f64 / 3.0).ceil() as usize);
 
         for row in 0..k {
             for col in 0..n {
@@ -169,11 +169,12 @@ impl TrueSolver {
         // For each row i of Pi, compute B[i,:] = Pi[i,:] * A.
         let mut b_entries: Vec<(usize, usize, f32)> = Vec::new();
 
+        // Hoist accumulator outside loop to avoid reallocating each iteration.
+        let mut b_row = vec![0.0f32; n];
         for pi_row in 0..k {
             let pi_start = pi.row_ptr[pi_row];
             let pi_end = pi.row_ptr[pi_row + 1];
 
-            let mut b_row = vec![0.0f32; n];
             for pi_idx in pi_start..pi_end {
                 let pi_col = pi.col_indices[pi_idx];
                 let pi_val = pi.values[pi_idx];
@@ -190,6 +191,9 @@ impl TrueSolver {
                     b_entries.push((pi_row, col, val));
                 }
             }
+
+            // Zero the accumulator for the next row.
+            b_row.iter_mut().for_each(|v| *v = 0.0);
         }
 
         let b_matrix = CsrMatrix::<f32>::from_coo(k, n, b_entries);
@@ -207,11 +211,12 @@ impl TrueSolver {
 
         let mut a_prime_entries: Vec<(usize, usize, f32)> = Vec::new();
 
-        for b_row in 0..k {
-            let b_start = b_matrix.row_ptr[b_row];
-            let b_end = b_matrix.row_ptr[b_row + 1];
+        // Hoist accumulator outside loop to avoid reallocating each iteration.
+        let mut row_accum = vec![0.0f32; k];
+        for b_row_idx in 0..k {
+            let b_start = b_matrix.row_ptr[b_row_idx];
+            let b_end = b_matrix.row_ptr[b_row_idx + 1];
 
-            let mut row_accum = vec![0.0f32; k];
             for b_idx in b_start..b_end {
                 let l = b_matrix.col_indices[b_idx];
                 let b_val = b_matrix.values[b_idx];
@@ -223,9 +228,12 @@ impl TrueSolver {
 
             for (j, &val) in row_accum.iter().enumerate() {
                 if val.abs() > f32::EPSILON {
-                    a_prime_entries.push((b_row, j, val));
+                    a_prime_entries.push((b_row_idx, j, val));
                 }
             }
+
+            // Zero the accumulator for the next row.
+            row_accum.iter_mut().for_each(|v| *v = 0.0);
         }
 
         CsrMatrix::<f32>::from_coo(k, k, a_prime_entries)
@@ -560,7 +568,11 @@ impl SolverEngine for TrueSolver {
         rhs: &[f64],
         _budget: &crate::types::ComputeBudget,
     ) -> Result<SolverResult, SolverError> {
-        // Convert f64 input to f32 for internal computation
+        // Convert f64 input to f32 for internal computation.
+        // NOTE: row_ptr and col_indices are cloned here because CsrMatrix owns
+        // Vec<usize>, so we cannot borrow from the f64 matrix. A future
+        // refactor could introduce a CsrMatrixView that borrows structural
+        // arrays to eliminate these allocations on the f64 -> f32 path.
         let f32_values: Vec<f32> = matrix.values.iter().map(|&v| v as f32).collect();
         let f32_matrix = CsrMatrix {
             row_ptr: matrix.row_ptr.clone(),

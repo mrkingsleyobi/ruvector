@@ -540,8 +540,8 @@ impl SolverOrchestrator {
                     let col_start = matrix.row_ptr[col];
                     let col_end = matrix.row_ptr[col + 1];
                     let found = matrix.col_indices[col_start..col_end]
-                        .iter()
-                        .any(|&c| c == row);
+                        .binary_search(&row)
+                        .is_ok();
                     if !found {
                         symmetric_mismatches += 1;
                     }
@@ -1130,7 +1130,7 @@ impl Default for SolverOrchestrator {
 #[inline]
 #[allow(dead_code)]
 fn dot(a: &[f64], b: &[f64]) -> f64 {
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len(), "dot: length mismatch {} vs {}", a.len(), b.len());
     a.iter()
         .zip(b.iter())
         .map(|(&ai, &bi)| ai * bi)

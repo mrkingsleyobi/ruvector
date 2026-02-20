@@ -74,7 +74,7 @@ use crate::types::{
 /// Debug-asserts that `a.len() == b.len()`.
 #[inline]
 pub fn dot_product_f64(a: &[f32], b: &[f32]) -> f64 {
-    debug_assert_eq!(a.len(), b.len(), "dot_product_f64: length mismatch");
+    assert_eq!(a.len(), b.len(), "dot_product_f64: length mismatch");
 
     let n = a.len();
     let chunks = n / 4;
@@ -106,7 +106,7 @@ pub fn dot_product_f64(a: &[f32], b: &[f32]) -> f64 {
 /// Used internally when the working vectors are already `f64`.
 #[inline]
 fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
-    debug_assert_eq!(a.len(), b.len(), "dot_f64: length mismatch");
+    assert_eq!(a.len(), b.len(), "dot_f64: length mismatch");
 
     let n = a.len();
     let chunks = n / 4;
@@ -140,7 +140,7 @@ fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
 /// Debug-asserts that `x.len() == y.len()`.
 #[inline]
 pub fn axpy(alpha: f32, x: &[f32], y: &mut [f32]) {
-    debug_assert_eq!(x.len(), y.len(), "axpy: length mismatch");
+    assert_eq!(x.len(), y.len(), "axpy: length mismatch");
 
     let n = x.len();
     let chunks = n / 4;
@@ -161,7 +161,7 @@ pub fn axpy(alpha: f32, x: &[f32], y: &mut [f32]) {
 /// Compute `y[i] += alpha * x[i]` for all `i` (AXPY operation, `f64`).
 #[inline]
 fn axpy_f64(alpha: f64, x: &[f64], y: &mut [f64]) {
-    debug_assert_eq!(x.len(), y.len(), "axpy_f64: length mismatch");
+    assert_eq!(x.len(), y.len(), "axpy_f64: length mismatch");
 
     let n = x.len();
     let chunks = n / 4;
@@ -349,8 +349,8 @@ impl ConjugateGradientSolver {
     /// Apply the diagonal preconditioner: `z[i] = inv_diag[i] * r[i]`.
     #[inline]
     fn apply_preconditioner(inv_diag: &[f64], r: &[f64], z: &mut [f64]) {
-        debug_assert_eq!(inv_diag.len(), r.len());
-        debug_assert_eq!(r.len(), z.len());
+        assert_eq!(inv_diag.len(), r.len());
+        assert_eq!(r.len(), z.len());
 
         let n = r.len();
         let chunks = n / 4;

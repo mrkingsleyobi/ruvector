@@ -268,7 +268,7 @@ impl<T: Copy + Default + std::ops::AddAssign> CsrMatrix<T> {
         entries: impl IntoIterator<Item = (usize, usize, T)>,
     ) -> Self {
         let mut sorted: Vec<_> = entries.into_iter().collect();
-        sorted.sort_by_key(|(r, c, _)| (*r, *c));
+        sorted.sort_unstable_by_key(|(r, c, _)| (*r, *c));
 
         let nnz = sorted.len();
         let mut row_ptr = vec![0usize; rows + 1];
@@ -276,7 +276,7 @@ impl<T: Copy + Default + std::ops::AddAssign> CsrMatrix<T> {
         let mut values = Vec::with_capacity(nnz);
 
         for &(r, _, _) in &sorted {
-            debug_assert!(r < rows, "row index {} out of bounds (rows={})", r, rows);
+            assert!(r < rows, "row index {} out of bounds (rows={})", r, rows);
             row_ptr[r + 1] += 1;
         }
         for i in 1..=rows {
@@ -284,7 +284,7 @@ impl<T: Copy + Default + std::ops::AddAssign> CsrMatrix<T> {
         }
 
         for (_, c, v) in sorted {
-            debug_assert!(c < cols, "col index {} out of bounds (cols={})", c, cols);
+            assert!(c < cols, "col index {} out of bounds (cols={})", c, cols);
             col_indices.push(c);
             values.push(v);
         }

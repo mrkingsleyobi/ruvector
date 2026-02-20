@@ -41,6 +41,9 @@ use crate::types::{
     SolverResult, SparsityProfile,
 };
 
+/// Maximum number of graph nodes to prevent OOM denial-of-service.
+const MAX_GRAPH_NODES: usize = 100_000_000;
+
 // ---------------------------------------------------------------------------
 // Solver struct
 // ---------------------------------------------------------------------------
@@ -178,6 +181,16 @@ impl BackwardPushSolver {
 
         let start = Instant::now();
         let n = graph.rows;
+
+        if n > MAX_GRAPH_NODES {
+            return Err(SolverError::InvalidInput(
+                ValidationError::MatrixTooLarge {
+                    rows: n,
+                    cols: n,
+                    max_dim: MAX_GRAPH_NODES,
+                },
+            ));
+        }
 
         // Build the transposed adjacency so row_entries(v) in `graph_t`
         // yields the in-neighbours of v in the original graph.

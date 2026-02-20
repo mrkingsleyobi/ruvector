@@ -105,16 +105,38 @@ pub struct ForwardPushSolver {
 impl ForwardPushSolver {
     /// Create a new forward-push solver.
     ///
-    /// # Panics
-    ///
-    /// Debug-asserts that `alpha` is in `(0, 1)` and `epsilon` is positive.
+    /// Parameters are validated lazily at the start of each computation
+    /// (see [`validate_params`](Self::validate_params)).
     pub fn new(alpha: f64, epsilon: f64) -> Self {
-        debug_assert!(
-            alpha > 0.0 && alpha < 1.0,
-            "alpha must be in (0, 1), got {alpha}",
-        );
-        debug_assert!(epsilon > 0.0, "epsilon must be positive, got {epsilon}");
         Self { alpha, epsilon }
+    }
+
+    /// Validate that `alpha` and `epsilon` are within acceptable ranges.
+    ///
+    /// # Errors
+    ///
+    /// - [`SolverError::InvalidInput`] if `alpha` is not in `(0, 1)` exclusive.
+    /// - [`SolverError::InvalidInput`] if `epsilon` is not positive.
+    fn validate_params(&self) -> Result<(), SolverError> {
+        if self.alpha <= 0.0 || self.alpha >= 1.0 {
+            return Err(SolverError::InvalidInput(
+                crate::error::ValidationError::ParameterOutOfRange {
+                    name: "alpha".into(),
+                    value: self.alpha.to_string(),
+                    expected: "(0.0, 1.0) exclusive".into(),
+                },
+            ));
+        }
+        if self.epsilon <= 0.0 {
+            return Err(SolverError::InvalidInput(
+                crate::error::ValidationError::ParameterOutOfRange {
+                    name: "epsilon".into(),
+                    value: self.epsilon.to_string(),
+                    expected: "> 0.0".into(),
+                },
+            ));
+        }
+        Ok(())
     }
 
     /// Create a solver with default parameters (`alpha = 0.85`,
@@ -139,6 +161,7 @@ impl ForwardPushSolver {
         graph: &CsrMatrix<f64>,
         source: usize,
     ) -> Result<Vec<(usize, f64)>, SolverError> {
+        self.validate_params()?;
         validate_vertex(graph, source, "source")?;
         self.forward_push_core(graph, &[(source, 1.0)])
     }
@@ -166,12 +189,27 @@ impl ForwardPushSolver {
     ///
     /// Uses a `VecDeque` work-queue with a membership bitvec to achieve
     /// O(1/epsilon) total work, independent of graph size.
+    /// Maximum number of graph nodes to prevent OOM DoS.
+    const MAX_GRAPH_NODES: usize = 100_000_000;
+
     fn forward_push_core(
         &self,
         graph: &CsrMatrix<f64>,
         seeds: &[(usize, f64)],
     ) -> Result<Vec<(usize, f64)>, SolverError> {
+        self.validate_params()?;
+
         let n = graph.rows;
+        if n > Self::MAX_GRAPH_NODES {
+            return Err(SolverError::InvalidInput(
+                crate::error::ValidationError::MatrixTooLarge {
+                    rows: n,
+                    cols: graph.cols,
+                    max_dim: Self::MAX_GRAPH_NODES,
+                },
+            ));
+        }
+
         let mut estimate = vec![KahanAccumulator::new(); n];
         let mut residual = vec![KahanAccumulator::new(); n];
 
@@ -437,7 +475,7 @@ impl SolverEngine for ForwardPushSolver {
         _profile: &SparsityProfile,
         _n: usize,
     ) -> ComplexityEstimate {
-        let est_ops = (1.0 / self.epsilon) as usize;
+        let est_ops = (1.0 / self.epsilon).min(usize::MAX as f64) as usize;
         ComplexityEstimate {
             algorithm: Algorithm::ForwardPush,
             estimated_flops: est_ops as u64 * 10,

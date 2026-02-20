@@ -120,8 +120,23 @@ impl NeumannSolver {
             return 0.0;
         }
 
-        // Extract diagonal and compute D^{-1}.
         let d_inv = extract_diag_inv_f32(matrix);
+        Self::estimate_spectral_radius_with_diag(matrix, &d_inv)
+    }
+
+    /// Inner helper: estimate spectral radius using a pre-computed `d_inv`.
+    ///
+    /// This avoids recomputing the diagonal inverse when the caller already
+    /// has it (e.g. `solve()` needs `d_inv` for both the spectral check and
+    /// the Jacobi iteration).
+    fn estimate_spectral_radius_with_diag(
+        matrix: &CsrMatrix<f32>,
+        d_inv: &[f32],
+    ) -> f64 {
+        let n = matrix.rows;
+        if n == 0 {
+            return 0.0;
+        }
 
         // Initialise with a deterministic pseudo-random unit vector.
         let mut v: Vec<f32> = (0..n)
@@ -222,10 +237,14 @@ impl NeumannSolver {
             });
         }
 
+        // Extract D^{-1} once — reused for both the spectral radius check
+        // and the Jacobi-preconditioned iteration that follows.
+        let d_inv = extract_diag_inv_f32(matrix);
+
         // ------------------------------------------------------------------
         // Spectral radius pre-check (10-step power iteration on I - D^{-1}A)
         // ------------------------------------------------------------------
-        let rho = Self::estimate_spectral_radius(matrix);
+        let rho = Self::estimate_spectral_radius_with_diag(matrix, &d_inv);
         if rho >= 1.0 {
             warn!(rho, "spectral radius >= 1.0, Neumann series will diverge");
             return Err(SolverError::SpectralRadiusExceeded {
@@ -235,9 +254,6 @@ impl NeumannSolver {
             });
         }
         info!(rho, "spectral radius check passed");
-
-        // Extract D^{-1} for Jacobi preconditioning.
-        let d_inv = extract_diag_inv_f32(matrix);
 
         // ------------------------------------------------------------------
         // Jacobi-preconditioned iteration (fused kernel)
@@ -372,9 +388,14 @@ impl SolverEngine for NeumannSolver {
         };
         let f32_rhs: Vec<f32> = rhs.iter().map(|&v| v as f32).collect();
 
-        // Use the tighter of the solver's own budget and the caller's budget.
+        // Use the tighter of the solver's own tolerance and the caller's budget,
+        // but no tighter than f32 precision allows (the Neumann solver operates
+        // internally in f32, so residuals below ~f32::EPSILON are unreachable).
         let max_iters = self.max_iterations.min(budget.max_iterations);
-        let tol = self.tolerance.max(budget.tolerance);
+        let tol = self
+            .tolerance
+            .min(budget.tolerance)
+            .max(f32::EPSILON as f64 * 4.0);
 
         let inner_solver = NeumannSolver::new(tol, max_iters);
 
@@ -439,6 +460,12 @@ fn extract_diag_inv_f32(matrix: &CsrMatrix<f32>) -> Vec<f32> {
                 let diag = matrix.values[idx];
                 if diag.abs() > 1e-15 {
                     d_inv[i] = 1.0 / diag;
+                } else {
+                    warn!(
+                        row = i,
+                        diag_value = %diag,
+                        "zero or near-zero diagonal entry; substituting 1.0 — matrix may be singular"
+                    );
                 }
                 break;
             }
