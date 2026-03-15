@@ -40,6 +40,8 @@
     "exotic:quantum": "node exotic/quantum-portfolio-optimization.js",
     "exotic:hyperbolic": "node exotic/hyperbolic-embeddings.js",
     "exotic:arbitrage": "node exotic/atomic-arbitrage.js",
+    "exotic:options-discovery": "node exotic/hyperbolic-options-discovery.js",
+    "exotic:options-integration": "node exotic/hyperbolic-options-integration.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
