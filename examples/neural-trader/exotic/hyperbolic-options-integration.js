@@ -284,7 +284,9 @@ class SpikingOptionsOrderFlow {
     for (let i = 0; i < preSpikes.length; i++) {
       if (preSpikes[i] > 0) {
         // Pre before post → strengthen (LTP)
-        this.W_input[postNeuron][i] += lr * this.preTrace[i];
+        this.W_input[postNeuron][i] = Math.max(-5, Math.min(5,
+          this.W_input[postNeuron][i] + lr * this.preTrace[i]
+        ));
       }
     }
     this.postTrace[postNeuron] = 1.0;
@@ -329,6 +331,9 @@ class JSSONAFallback {
         avgQuality: highQuality.reduce((s, t) => s + t.quality, 0) / highQuality.length,
         timestamp: Date.now()
       });
+
+      // Bound patterns array
+      if (this.patterns.length > 500) this.patterns.shift();
     }
 
     return this.patterns.length;
@@ -507,6 +512,9 @@ class HyperbolicOptionsEngine {
 function generateOrderFlow(chain, numTrades = 100) {
   const trades = [];
   const { options, spot } = chain;
+
+  if (!options || options.length === 0) return trades;
+  numTrades = Math.min(numTrades, 10000); // Cap to prevent excessive generation
 
   for (let i = 0; i < numTrades; i++) {
     const opt = options[Math.floor(Math.random() * options.length)];

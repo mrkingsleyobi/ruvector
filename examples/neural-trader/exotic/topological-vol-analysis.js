@@ -1061,7 +1061,9 @@ class VolSurfaceRicciFlow {
       this.edgeWeights.delete(edgeKey);
 
       // Remove from adjacency lists
-      const [nodeA, nodeB] = this._parseEdgeKey(edgeKey);
+      const parsed = this._parseEdgeKey(edgeKey);
+      if (!parsed) continue; // Skip unparseable edge keys
+      const [nodeA, nodeB] = parsed;
       if (this.adjacency.has(nodeA)) {
         const neighbors = this.adjacency.get(nodeA);
         const idx = neighbors.findIndex(n => {
@@ -1116,7 +1118,7 @@ class VolSurfaceRicciFlow {
       const b = key.slice(mid + 1);
       if (this.nodeData.has(a) && this.nodeData.has(b)) return [a, b];
     }
-    return [key, key]; // shouldn't happen
+    return null; // edge key could not be parsed
   }
 
   _getNodeInfo(nodeId) {
@@ -1151,11 +1153,11 @@ class VolSurfaceRicciFlow {
 
   _curvatureStats(curvatures) {
     const values = [...curvatures.values()];
-    if (values.length === 0) return { meanCurvature: 0, minCurvature: 0, maxCurvature: 0, stdCurvature: 0 };
+    if (values.length === 0) return { meanCurvature: 0, minCurvature: 0, maxCurvature: 0, stdCurvature: 0, negativeFraction: 0 };
 
     const mean = values.reduce((s, v) => s + v, 0) / values.length;
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = values.reduce((a, v) => v < a ? v : a, Infinity);
+    const max = values.reduce((a, v) => v > a ? v : a, -Infinity);
     const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
 
     return {
@@ -1234,7 +1236,9 @@ class VolSurfaceRicciFlow {
 
     if (negativeEdges.length > 0) {
       for (const [edgeKey, kappa] of negativeEdges.slice(0, 5)) {
-        const [nodeA, nodeB] = this._parseEdgeKey(edgeKey);
+        const parsed = this._parseEdgeKey(edgeKey);
+        if (!parsed) continue;
+        const [nodeA, nodeB] = parsed;
         signals.push({
           type: 'NEGATIVE_CURVATURE_BOTTLENECK',
           severity: kappa < -1 ? 'HIGH' : 'MEDIUM',
@@ -1345,6 +1349,7 @@ class TopologicalVolAnalysis {
     };
 
     this.results.push(result);
+    if (this.results.length > 500) this.results.shift();
     return result;
   }
 

@@ -1165,8 +1165,19 @@ class CurvatureKelly {
    * @param {number} bankroll - Current portfolio value
    */
   calculateSize(winProb, decimalOdds, curvatureInfo, bankroll) {
-    // Standard Kelly
-    const b = decimalOdds - 1;
+    // Input validation
+    if (!Number.isFinite(winProb) || winProb <= 0 || winProb >= 1) {
+      return { action: 'SKIP', reason: 'Invalid win probability', bet: 0, edge: 0, fullKelly: 0, adjustedKelly: 0, curvatureSignal: 0 };
+    }
+    if (!Number.isFinite(decimalOdds) || decimalOdds <= 1) {
+      return { action: 'SKIP', reason: 'Invalid odds (must be > 1)', bet: 0, edge: 0, fullKelly: 0, adjustedKelly: 0, curvatureSignal: 0 };
+    }
+    if (!Number.isFinite(bankroll) || bankroll <= 0) {
+      return { action: 'SKIP', reason: 'Invalid bankroll', bet: 0, edge: 0, fullKelly: 0, adjustedKelly: 0, curvatureSignal: 0 };
+    }
+
+    // Standard Kelly: f* = (bp - q) / b
+    const b = decimalOdds - 1; // guaranteed > 0 by validation above
     const p = winProb;
     const q = 1 - p;
     const fullKelly = Math.max(0, (b * p - q) / b);
@@ -1496,15 +1507,24 @@ class OptionsChainGenerator {
         iv = Math.max(5, iv);
 
         // Black-Scholes-inspired Greeks
-        const d1 = (Math.log(spot / strike) + (0.05 + iv * iv / 20000) * timeToExpiry) /
-                    (iv / 100 * Math.sqrt(timeToExpiry) + 1e-10);
+        // Guard: clamp timeToExpiry and iv to prevent NaN
+        const safeTimeToExpiry = Math.max(1 / 365, timeToExpiry); // at least 1 day
+        const safeIV = Math.max(1, iv); // at least 1% IV
+        const safeStrike = Math.max(0.01, strike);
+
+        const d1Raw = (Math.log(spot / safeStrike) + (0.05 + safeIV * safeIV / 20000) * safeTimeToExpiry) /
+                      (safeIV / 100 * Math.sqrt(safeTimeToExpiry) + 1e-10);
+        const d1 = Math.max(-10, Math.min(10, d1Raw)); // clamp to prevent extreme exp()
 
         const normCdf = x => 0.5 * (1 + Math.tanh(x * 0.7978845608));
 
         const callDelta = normCdf(d1);
-        const gamma = Math.exp(-d1 * d1 / 2) / (spot * iv / 100 * Math.sqrt(2 * Math.PI * timeToExpiry) + 1e-10);
-        const vega = spot * Math.sqrt(timeToExpiry) * Math.exp(-d1 * d1 / 2) / Math.sqrt(2 * Math.PI);
-        const theta = -(spot * iv / 100 * Math.exp(-d1 * d1 / 2)) / (2 * Math.sqrt(2 * Math.PI * timeToExpiry) + 1e-10);
+        const expD1 = Math.exp(-d1 * d1 / 2);
+        const sqrtT = Math.sqrt(safeTimeToExpiry);
+        const sqrt2PI = Math.sqrt(2 * Math.PI);
+        const gamma = expD1 / (spot * safeIV / 100 * sqrt2PI * sqrtT + 1e-10);
+        const vega = spot * sqrtT * expD1 / sqrt2PI;
+        const theta = -(spot * safeIV / 100 * expD1) / (2 * sqrt2PI * sqrtT + 1e-10);
 
         // Volume: higher near ATM, random spikes
         let volume = Math.floor(1000 * Math.exp(-moneyness * moneyness * 20) * (1 + Math.random()));
