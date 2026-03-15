@@ -42,6 +42,14 @@ import {
 // CONFIGURATION
 // =============================================================================
 
+// Safety limits
+const TDA_LIMITS = {
+  MAX_OPTIONS: 2000,      // Max options for TDA (O(n²) pairwise)
+  MAX_EDGES: 100000,      // Max edges in simplicial complex
+  MAX_FLOW_HISTORY: 500,  // Max Ricci flow history entries
+  MAX_SURGERIES: 100      // Max surgery events recorded
+};
+
 const tdaConfig = {
   // Persistent homology settings
   homology: {
@@ -234,6 +242,16 @@ class VolSurfacePersistence {
    * - Time to expiry difference
    */
   buildComplex(chain) {
+    if (!chain || !chain.options || !Array.isArray(chain.options)) {
+      throw new Error('Invalid chain: must have options array');
+    }
+    if (!chain.spot || chain.spot <= 0 || !Number.isFinite(chain.spot)) {
+      throw new Error('Invalid chain: spot must be a positive finite number');
+    }
+    if (chain.options.length > TDA_LIMITS.MAX_OPTIONS) {
+      throw new Error(`Chain too large for TDA: ${chain.options.length} > ${TDA_LIMITS.MAX_OPTIONS}. Subsample first.`);
+    }
+
     this.complex = new SimplicialComplex();
     const { options, spot } = chain;
 
@@ -243,11 +261,12 @@ class VolSurfacePersistence {
       this.complex.addVertex(id, opt, 0); // all born at filtration 0
     }
 
-    // Compute pairwise distances
+    // Compute pairwise distances (O(n²) — bounded by MAX_OPTIONS)
     const distances = [];
     for (let i = 0; i < options.length; i++) {
       for (let j = i + 1; j < options.length; j++) {
         const d = this._optionDistance(options[i], options[j], spot);
+        if (!Number.isFinite(d)) continue; // NaN/Infinity guard
         distances.push({ i, j, d, opt_i: options[i], opt_j: options[j] });
       }
     }
@@ -255,8 +274,26 @@ class VolSurfacePersistence {
     // Sort by distance (this determines the filtration order)
     distances.sort((a, b) => a.d - b.d);
 
+    // Keep only k-nearest edges per node to control complexity
+    // This converts O(n²) edges to O(n·k) while preserving topology
+    const MAX_EDGES_PER_NODE = 15;
+    const edgeCounts = new Map();
+    const filteredDistances = [];
+
+    for (const entry of distances) {
+      const { i, j } = entry;
+      const countI = edgeCounts.get(i) || 0;
+      const countJ = edgeCounts.get(j) || 0;
+
+      if (countI < MAX_EDGES_PER_NODE && countJ < MAX_EDGES_PER_NODE) {
+        filteredDistances.push(entry);
+        edgeCounts.set(i, countI + 1);
+        edgeCounts.set(j, countJ + 1);
+      }
+    }
+
     // Add edges at their filtration values
-    for (const { i, j, d, opt_i, opt_j } of distances) {
+    for (const { i, j, d, opt_i, opt_j } of filteredDistances) {
       const id_i = `${opt_i.type}_${opt_i.strike}_${opt_i.expiry}`;
       const id_j = `${opt_j.type}_${opt_j.strike}_${opt_j.expiry}`;
       this.complex.addEdge(id_i, id_j, d, 1 / (1 + d));
@@ -264,40 +301,65 @@ class VolSurfacePersistence {
 
     // Add triangles (Vietoris-Rips): a triangle exists when all 3 edges exist
     // Only add up to maxSimplices to control memory
-    this._buildTriangles(options, distances, spot);
+    this._buildTriangles(options, filteredDistances, spot);
 
     return this.complex;
   }
 
   _buildTriangles(options, sortedDistances, spot) {
-    // Build adjacency at each distance threshold
-    // For efficiency, only check triples where all three edges are short
-    const edgeSet = new Map(); // "i_j" → distance
+    // OPTIMIZED: Use adjacency sets so triangle check is O(degree) not O(n)
+    // This reduces complexity from O(edges × n) to O(edges × avg_degree)
+    const adjacency = new Map();  // nodeIdx → Set of neighbor indices
+    const edgeSet = new Map();    // "i_j" → distance
     let triangleCount = 0;
+    const seen = new Set();       // deduplicate triangles
 
     for (const { i, j, d } of sortedDistances) {
-      edgeSet.set(`${i}_${j}`, d);
-
-      // Check if adding this edge completes any triangles
       if (triangleCount >= this.config.maxSimplices) break;
 
-      for (let k = 0; k < options.length && triangleCount < this.config.maxSimplices; k++) {
+      edgeSet.set(`${i}_${j}`, d);
+
+      // Add to adjacency
+      if (!adjacency.has(i)) adjacency.set(i, new Set());
+      if (!adjacency.has(j)) adjacency.set(j, new Set());
+      adjacency.get(i).add(j);
+      adjacency.get(j).add(i);
+
+      // Check common neighbors of i and j (intersection of adjacency sets)
+      const neighborsI = adjacency.get(i);
+      const neighborsJ = adjacency.get(j);
+
+      // Iterate over the smaller set for efficiency
+      const [smaller, larger] = neighborsI.size <= neighborsJ.size
+        ? [neighborsI, neighborsJ]
+        : [neighborsJ, neighborsI];
+
+      for (const k of smaller) {
         if (k === i || k === j) continue;
+        if (!larger.has(k)) continue;
+        if (triangleCount >= this.config.maxSimplices) break;
 
-        const ik = i < k ? `${i}_${k}` : `${k}_${i}`;
-        const jk = j < k ? `${j}_${k}` : `${k}_${j}`;
+        // k is a common neighbor → triangle (i, j, k) exists
+        const sorted = [i, j, k].sort((a, b) => a - b);
+        const triKey = `${sorted[0]}_${sorted[1]}_${sorted[2]}`;
+        if (seen.has(triKey)) continue;
+        seen.add(triKey);
 
-        if (edgeSet.has(ik) && edgeSet.has(jk)) {
-          // Triangle exists! Filtration = max edge distance (Rips condition)
-          const triFiltr = Math.max(d, edgeSet.get(ik), edgeSet.get(jk));
+        const ik = sorted[0] === i ? `${i}_${k < i ? k : k}` : `${Math.min(i, k)}_${Math.max(i, k)}`;
+        const jk = `${Math.min(j, k)}_${Math.max(j, k)}`;
+        const ijKey = `${Math.min(i, j)}_${Math.max(i, j)}`;
 
-          const id_i = `${options[i].type}_${options[i].strike}_${options[i].expiry}`;
-          const id_j = `${options[j].type}_${options[j].strike}_${options[j].expiry}`;
-          const id_k = `${options[k].type}_${options[k].strike}_${options[k].expiry}`;
+        const dIK = edgeSet.get(ik) || edgeSet.get(`${k}_${i}`) || d;
+        const dJK = edgeSet.get(jk) || edgeSet.get(`${k}_${j}`) || d;
+        const dIJ = edgeSet.get(ijKey) || d;
+        const triFiltr = Math.max(dIJ, dIK, dJK);
 
-          this.complex.addTriangle(id_i, id_j, id_k, triFiltr);
-          triangleCount++;
-        }
+        const id_i = `${options[sorted[0]].type}_${options[sorted[0]].strike}_${options[sorted[0]].expiry}`;
+        const id_j = `${options[sorted[1]].type}_${options[sorted[1]].strike}_${options[sorted[1]].expiry}`;
+        const id_k = `${options[sorted[2]].type}_${options[sorted[2]].strike}_${options[sorted[2]].expiry}`;
+
+        this.complex.addTriangle(id_i, id_j, id_k, triFiltr);
+        triangleCount++;
       }
     }
   }
@@ -940,8 +1002,8 @@ class VolSurfaceRicciFlow {
         this._performSurgery(collapsed, step);
       }
 
-      // 4. Record history
-      if (this.config.trackHistory) {
+      // 4. Record history (bounded)
+      if (this.config.trackHistory && this.history.length < TDA_LIMITS.MAX_FLOW_HISTORY) {
         const curvatureStats = this._curvatureStats(curvatures);
         this.history.push({
           step,
@@ -1017,7 +1079,8 @@ class VolSurfaceRicciFlow {
         if (idx >= 0) neighbors.splice(idx, 1);
       }
 
-      // Record surgery
+      // Record surgery (bounded)
+      if (this.surgeries.length >= TDA_LIMITS.MAX_SURGERIES) continue;
       this.surgeries.push({
         step,
         edgeKey,

@@ -46,6 +46,16 @@
 // CONFIGURATION
 // =============================================================================
 
+// Safety limits to prevent resource exhaustion
+const LIMITS = {
+  MAX_OPTIONS: 5000,        // Max options in a single chain
+  MAX_HISTORY: 10000,       // Max stored regime snapshots
+  MAX_DISCOVERIES: 1000,    // Max stored discovery results
+  MAX_LOSSES: 500,          // Max training loss history
+  MAX_EDGES: 50000,         // Max GNN edges
+  MAX_KELLY_HISTORY: 1000   // Max Kelly trade history
+};
+
 const discoveryConfig = {
   // Hyperbolic embedding for options surface
   hyperbolic: {
@@ -186,8 +196,9 @@ class OptionsPoincareSpace {
 
   // Riemannian gradient from Euclidean gradient
   riemannianGrad(x, eucGrad) {
-    const xNorm2 = this._dot(x, x);
-    const scale = Math.pow(1 - this.c * xNorm2, 2) / 4;
+    const xNorm2 = Math.min(this._dot(x, x), 1 / this.c - this.eps); // guard: keep inside ball
+    const factor = 1 - this.c * xNorm2;
+    const scale = factor * factor / 4;
     return eucGrad.map(g => g * scale);
   }
 
@@ -264,6 +275,17 @@ class OptionsHyperbolicEncoder {
    *   chain.options: Array<{strike, expiry, type, bid, ask, iv, delta, gamma, vega, theta, volume, oi}>
    */
   encode(chain) {
+    // Input validation
+    if (!chain || !chain.options || !Array.isArray(chain.options)) {
+      throw new Error('Invalid chain: must have options array');
+    }
+    if (!chain.spot || chain.spot <= 0 || !Number.isFinite(chain.spot)) {
+      throw new Error('Invalid chain: spot must be a positive finite number');
+    }
+    if (chain.options.length > LIMITS.MAX_OPTIONS) {
+      throw new Error(`Chain exceeds maximum size: ${chain.options.length} > ${LIMITS.MAX_OPTIONS}`);
+    }
+
     const { spot, options } = chain;
 
     // Step 1: Build the options tree hierarchy
@@ -390,6 +412,7 @@ class OptionsHyperbolicEncoder {
       }
 
       this.losses.push(totalLoss);
+      if (this.losses.length > LIMITS.MAX_LOSSES) this.losses.shift();
     }
   }
 
@@ -443,13 +466,17 @@ class OptionsHyperbolicEncoder {
 
   _updateGreeksSimilarity(key, data, lr) {
     // Find options with similar delta (delta-equivalent connections)
+    // Limit comparisons to avoid O(n²) blowup
+    let matches = 0;
+    const MAX_MATCHES = 5;
+
     for (const [otherKey, otherNode] of this.chainGraph) {
+      if (matches >= MAX_MATCHES) break;
       if (otherKey === key || otherNode.depth !== 3) continue;
       if (!otherNode.data.delta) continue;
 
       const deltaDiff = Math.abs(data.delta - otherNode.data.delta);
       if (deltaDiff < 0.05) {
-        // These options are delta-equivalent → attract in hyperbolic space
         const emb1 = this.embeddings.get(key);
         const emb2 = this.embeddings.get(otherKey);
         if (!emb1 || !emb2) continue;
@@ -457,6 +484,7 @@ class OptionsHyperbolicEncoder {
         const direction = this.poincare.logMap(emb1, emb2);
         const tangent = direction.map(v => v * lr * 0.5);
         this.embeddings.set(key, this.poincare.project(this.poincare.expMap(emb1, tangent)));
+        matches++;
       }
     }
   }
@@ -695,9 +723,11 @@ class VolSurfaceGNN {
     }
 
     for (const opt of options) {
+      if (this.edges.length >= LIMITS.MAX_EDGES) break;
       const key = `${opt.type}_${opt.strike}_${opt.expiry}`;
 
       for (const other of options) {
+        if (this.edges.length >= LIMITS.MAX_EDGES) break;
         if (opt === other) continue;
         const otherKey = `${other.type}_${other.strike}_${other.expiry}`;
 
@@ -1005,6 +1035,10 @@ class VolRegimeHNSW {
    * Add a labeled historical vol surface
    */
   addSnapshot(chain, regimeLabel, metadata = {}) {
+    if (this.regimes.length >= LIMITS.MAX_HISTORY) {
+      // Evict oldest snapshot
+      this.regimes.shift();
+    }
     const vec = this.surfaceToVector(chain);
     const id = this.regimes.length;
 
@@ -1179,6 +1213,7 @@ class CurvatureKelly {
     };
 
     this.history.push(result);
+    if (this.history.length > LIMITS.MAX_KELLY_HISTORY) this.history.shift();
     return result;
   }
 
@@ -1286,6 +1321,7 @@ class HyperbolicOptionsDiscovery {
     };
 
     this.discoveries.push(result);
+    if (this.discoveries.length > LIMITS.MAX_DISCOVERIES) this.discoveries.shift();
     return result;
   }
 
