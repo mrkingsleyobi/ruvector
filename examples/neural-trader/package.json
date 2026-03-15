@@ -42,6 +42,7 @@
     "exotic:arbitrage": "node exotic/atomic-arbitrage.js",
     "exotic:options-discovery": "node exotic/hyperbolic-options-discovery.js",
     "exotic:options-integration": "node exotic/hyperbolic-options-integration.js",
+    "exotic:topological-vol": "node exotic/topological-vol-analysis.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
